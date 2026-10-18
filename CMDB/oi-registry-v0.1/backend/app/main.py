@@ -1,4 +1,4 @@
-"""OI Registry 0.2 — CMDB, immutable OI snapshots and change review."""
+"""OI Registry 0.5 — CMDB, control planning and evidence-backed governance."""
 from __future__ import annotations
 
 import csv
@@ -32,10 +32,10 @@ from app.models import (
     FieldDefinition, FieldValue, FieldValueRevision, FieldAssertionRevision, Document,
     FieldEvidence, AuditEvent, ConfigurationBaseline, ConfigurationChange,
     AssetComponent, SharedPeripheral, AssetPeripheralAccess, AssetSecurityTool,
-    ServiceRequest, WorkEntry, AssetInspection, OIProposal, PlannedActivity, now,
+    ServiceRequest, WorkEntry, AssetInspection, OIProposal, PlannedActivity, ControlRule, now,
 )
 
-app = FastAPI(title="OI Registry", version="0.4.0", docs_url=None, redoc_url=None)
+app = FastAPI(title="OI Registry", version="0.5.0", docs_url=None, redoc_url=None)
 AUDIT_REQUEST = ContextVar('oi_audit_request', default={})
 try:
     LOCAL_TIMEZONE = ZoneInfo(os.getenv('OI_REPORT_TZ', 'Europe/Moscow'))
@@ -1690,7 +1690,7 @@ def weekly_report(week_start:date|None=None,user_id:int|None=None,format:Literal
 
 # ---- v0.4 automated local controls and explicitly opt-in OpenProject outbox ----
 from app.automation import plan as plan_controls
-from app.openproject_client import configuration as op_configuration, enabled as op_sync_enabled, publish as op_publish
+from app.openproject_client import configuration as op_configuration, enabled as op_sync_enabled, publish as op_publish, fetch_work_package as op_fetch_work_package
 
 @app.get('/api/automation/preview')
 def automation_preview(db:DBSession=Depends(get_db),user:User=Depends(current_user)):
@@ -1705,13 +1705,15 @@ def automation_plan(db:DBSession=Depends(get_db),user:User=Depends(editor_or_adm
 
 @app.get('/api/automation/activities')
 def automation_activities(status:str|None=None,event_type:str|None=None,oi_id:int|None=None,
-                          limit:int=Query(200,ge=1,le=1000),db:DBSession=Depends(get_db),
-                          user:User=Depends(current_user)):
+                          limit:int=Query(200,ge=1,le=1000),offset:int=Query(0,ge=0),
+                          db:DBSession=Depends(get_db),user:User=Depends(current_user)):
     query=select(PlannedActivity)
-    if status:query=query.where(PlannedActivity.status==status)
+    if status == 'pending':
+        query=query.where(PlannedActivity.status.in_(['open','acknowledged']))
+    elif status:query=query.where(PlannedActivity.status==status)
     if event_type:query=query.where(PlannedActivity.event_type==event_type)
     if oi_id:query=query.where(PlannedActivity.oi_id==oi_id)
-    return [asdict(x) for x in db.scalars(query.order_by(PlannedActivity.deadline,PlannedActivity.id).limit(limit))]
+    return [asdict(x) for x in db.scalars(query.order_by(PlannedActivity.deadline,PlannedActivity.id).offset(offset).limit(limit))]
 
 class ActivityNote(BaseModel):
     note: str=Field(min_length=10,max_length=1000)
@@ -1757,3 +1759,152 @@ def automation_publish(id:int,db:DBSession=Depends(get_db),user:User=Depends(adm
     audit(db,user,'control_published','planned_activity',item.id,{'openproject_work_package_id':wid})
     commit(db)
     return asdict(item)
+
+
+# ---- v0.5 configurable periodic controls with evidence and safe status lookup ----
+class ControlRuleInput(BaseModel):
+    title: str = Field(min_length=3, max_length=250)
+    scope: Literal['oi', 'asset']
+    oi_id: int | None = Field(default=None, ge=1)
+    first_due: date
+    interval_months: Literal[1, 3, 6, 12]
+    assignee: str = Field(default='', max_length=180)
+
+    @field_validator('title')
+    @classmethod
+    def meaningful_title(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 3:
+            raise ValueError('Нужно осмысленное название регламента')
+        return value
+
+
+class ControlCompletion(BaseModel):
+    evidence_document_id: int = Field(ge=1)
+    note: str = Field(min_length=10, max_length=2000)
+
+    @field_validator('note')
+    @classmethod
+    def meaningful_note(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 10:
+            raise ValueError('Опишите фактическое выполнение не менее чем 10 символами')
+        return value
+
+
+@app.get('/api/automation/rules')
+def list_control_rules(db: DBSession = Depends(get_db), user: User = Depends(current_user)):
+    return [asdict(x) for x in db.scalars(select(ControlRule).order_by(ControlRule.id))]
+
+
+@app.post('/api/automation/rules', status_code=201)
+def create_control_rule(data: ControlRuleInput, db: DBSession = Depends(get_db),
+                        user: User = Depends(admin_only)):
+    if data.oi_id is not None and db.get(InformationObject, data.oi_id) is None:
+        raise HTTPException(404, 'ОИ не найден')
+    rule = ControlRule(**data.model_dump(), created_by=user.id)
+    db.add(rule)
+    db.flush()
+    audit(db, user, 'control_rule_created', 'control_rule', rule.id,
+          {'scope': rule.scope, 'oi_id': rule.oi_id, 'interval_months': rule.interval_months})
+    commit(db)
+    return asdict(rule)
+
+
+@app.post('/api/automation/rules/{id}/disable')
+def disable_control_rule(id: int, db: DBSession = Depends(get_db), user: User = Depends(admin_only)):
+    rule = db.get(ControlRule, id)
+    if rule is None:
+        raise HTTPException(404, 'Правило не найдено')
+    if not rule.active:
+        raise HTTPException(409, 'Правило уже выключено')
+    rule.active = False
+    changed = 0
+    for item in db.scalars(select(PlannedActivity).where(PlannedActivity.rule_id == id,
+                                                        PlannedActivity.status.in_(['open', 'acknowledged']))):
+        item.status = 'superseded'
+        changed += 1
+        if item.sync_status == 'published':
+            item.sync_error = 'Правило выключено; задачу OpenProject необходимо сверить вручную'
+    audit(db, user, 'control_rule_disabled', 'control_rule', id, {'superseded_count': changed})
+    commit(db)
+    return {'id': id, 'active': False, 'superseded_count': changed}
+
+
+@app.post('/api/automation/rules/{id}/enable')
+def enable_control_rule(id: int, db: DBSession = Depends(get_db), user: User = Depends(admin_only)):
+    rule = db.get(ControlRule, id)
+    if rule is None:
+        raise HTTPException(404, 'Правило не найдено')
+    if rule.active:
+        raise HTTPException(409, 'Правило уже активно')
+    rule.active = True
+    # Previous superseded records stay in history; users can start new periods.
+    audit(db, user, 'control_rule_enabled', 'control_rule', id)
+    commit(db)
+    return asdict(rule)
+
+
+@app.get('/api/automation/summary')
+def control_summary(db: DBSession = Depends(get_db), user: User = Depends(current_user)):
+    today = datetime.now(LOCAL_TIMEZONE).date()
+    records = list(db.scalars(select(PlannedActivity)))
+    pending = [x for x in records if x.status in ('open', 'acknowledged')]
+    by_oi = {}
+    for item in pending:
+        slot = by_oi.setdefault(item.oi_id, {'oi_id': item.oi_id, 'pending': 0, 'overdue': 0, 'due_30_days': 0})
+        slot['pending'] += 1
+        if item.deadline < today:
+            slot['overdue'] += 1
+        if today <= item.deadline <= today + timedelta(days=30):
+            slot['due_30_days'] += 1
+    return {'as_of': today.isoformat(), 'total': len(records), 'pending': len(pending),
+            'overdue': sum(x.deadline < today for x in pending),
+            'due_30_days': sum(today <= x.deadline <= today + timedelta(days=30) for x in pending),
+            'completed': sum(x.status == 'completed' for x in records),
+            'by_oi': sorted(by_oi.values(), key=lambda x: (-x['overdue'], -x['pending'], x['oi_id']))}
+
+
+@app.post('/api/automation/activities/{id}/complete')
+def complete_control(id: int, data: ControlCompletion, db: DBSession = Depends(get_db),
+                     user: User = Depends(editor_or_admin)):
+    item = db.get(PlannedActivity, id)
+    if item is None:
+        raise HTTPException(404, 'Мероприятие не найдено')
+    if item.status not in ('open', 'acknowledged'):
+        raise HTTPException(409, 'Мероприятие уже закрыто или отменено')
+    if db.get(Document, data.evidence_document_id) is None:
+        raise HTTPException(404, 'Подтверждающий документ не найден')
+    item.status = 'completed'
+    item.evidence_document_id = data.evidence_document_id
+    item.completion_note = data.note
+    item.completed_by = user.id
+    item.completed_at = now()
+    audit(db, user, 'control_completed', 'planned_activity', item.id,
+          {'evidence_document_id': data.evidence_document_id, 'note': data.note})
+    commit(db)
+    return asdict(item)
+
+
+@app.post('/api/automation/activities/{id}/reconcile')
+def reconcile_control(id: int, db: DBSession = Depends(get_db), user: User = Depends(admin_only)):
+    item = db.get(PlannedActivity, id)
+    if item is None:
+        raise HTTPException(404, 'Мероприятие не найдено')
+    if item.sync_status != 'published' or not item.openproject_work_package_id:
+        raise HTTPException(409, 'Нет опубликованной задачи для сверки')
+    try:
+        remote = op_fetch_work_package(item.openproject_work_package_id)
+    except Exception as err:
+        # Never reveal tokens, URLs or HTTP bodies from external service.
+        audit(db, user, 'control_remote_check_failed', 'planned_activity', id,
+              {'error_type': type(err).__name__})
+        commit(db)
+        raise HTTPException(502, 'Не удалось получить статус из OpenProject; проверьте настройки и доступ') from None
+    item.remote_status = remote['status']
+    item.remote_checked_at = now()
+    audit(db, user, 'control_remote_checked', 'planned_activity', id,
+          {'remote_status': remote['status'], 'work_package_id': item.openproject_work_package_id})
+    commit(db)
+    return {'activity': asdict(item), 'remote': remote,
+            'note': 'OpenProject не закрывает мероприятие автоматически; приложите доказательство в OI Registry'}

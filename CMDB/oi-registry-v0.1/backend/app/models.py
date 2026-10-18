@@ -357,5 +357,29 @@ class PlannedActivity(Base):
     last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now, nullable=False)
+    rule_id: Mapped[int | None] = mapped_column(ForeignKey("control_rules.id", ondelete="RESTRICT"), nullable=True)
+    assignee: Mapped[str] = mapped_column(String(180), default="", nullable=False)
+    evidence_document_id: Mapped[int | None] = mapped_column(ForeignKey("documents.id", ondelete="RESTRICT"), nullable=True)
+    completion_note: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    completed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    remote_status: Mapped[str] = mapped_column(String(120), default="", nullable=False)
+    remote_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     __table_args__ = (Index("ix_planned_activity_status_deadline", "status", "deadline"),
                       Index("ix_planned_activity_oi", "oi_id", "event_type"))
+
+
+class ControlRule(Base):
+    """Admin-approved periodic control; no claim of regulatory applicability is implied."""
+    __tablename__ = "control_rules"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str] = mapped_column(String(250), nullable=False)
+    scope: Mapped[str] = mapped_column(String(16), nullable=False)  # oi or asset
+    oi_id: Mapped[int | None] = mapped_column(ForeignKey("information_objects.id", ondelete="RESTRICT"))
+    first_due: Mapped[date] = mapped_column(Date, nullable=False)
+    interval_months: Mapped[int] = mapped_column(Integer, nullable=False)
+    assignee: Mapped[str] = mapped_column(String(180), default="", nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, nullable=False)
+    __table_args__ = (Index("ix_control_rules_active_scope", "active", "scope", "oi_id"),)

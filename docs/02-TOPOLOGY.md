@@ -43,3 +43,7 @@ flowchart TB
 ## Портовая инвентаризация
 
 На хосте: `sudo ss -lntup`; в Docker: `sudo docker ps --format 'table {{.Names}}\t{{.Ports}}'`. Заполните уточнения через локальный скрипт в `docs/local/`; не копируйте полный вывод с адресами закрытых сегментов в открытый Git.
+
+## Целевая топология WS2019 (пока не внедрена)
+
+**[ПЛАН]** Отдельный регламент: [перенос Debian/VirtualBox на WS2019, NAT/Bridge и маршрутизация](operations/WS2019-VIRTUALBOX-MIGRATION.md). Схемы: [NAT Port Forwarding](diagrams/04-ws2019-publication.mmd), [Bridged Adapter](diagrams/05-ws2019-bridged.mmd). Реальные IP не подтверждены; заполнить закрытый сетевой паспорт после внедрения.

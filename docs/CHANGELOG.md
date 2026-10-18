@@ -21,3 +21,11 @@
 ## oi-registry v0.5 — 2026-10-18 (ЧЕРНОВИК, НЕ ВНЕДРЁН)
 
 - См. [шаблон релиза](releases/oi-registry-v0.5.md); заполнить по факту.
+
+## docs-ws2019-1.1 — 2026-10-18
+
+- Добавлено руководство по миграции Debian VirtualBox VM на Windows Server 2019.
+- Разделены сетевые модели: NAT Port Forwarding, Bridged Adapter, альтернативный RRAS/Host-Only.
+- Добавлены конфигурация Nginx TLS reverse proxy, правила Windows Defender Firewall, DNS/ACL, проверка Hyper-V, диагностика и rollback.
+- Добавлены Mermaid-схемы, шаблон сетевого паспорта и read-only PowerShell-инвентаризация.
+- Весь целевой WS2019-контур отмечен как [ПЛАН] до фактической приёмки.

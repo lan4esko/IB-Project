@@ -43,3 +43,11 @@
 ## Первое размещение
 
 Распаковать ZIP в `/home/admsec/ZGT`, чтобы появился `/home/admsec/ZGT/docs/README.md`. Архив содержит только `docs/` и безопасные примеры. Рекомендовано проверить `git status`, затем добавить `docs/` отдельным коммитом. Для новых релизов использовать инструкцию [DOCUMENTATION-POLICY.md](DOCUMENTATION-POLICY.md).
+
+## Перенос на Windows Server 2019 / VirtualBox (docs-ws2019-1.1)
+
+- [Сеть, NAT/Bridged, Nginx reverse proxy, маршрутизация, диагностика](operations/WS2019-VIRTUALBOX-MIGRATION.md)
+- [Схема NAT + Port Forwarding](diagrams/04-ws2019-publication.mmd)
+- [Схема Bridged Adapter](diagrams/05-ws2019-bridged.mmd)
+- [Шаблон сетевого паспорта](templates/WS2019-NETWORK-PASSPORT.md)
+- [Инвентаризация WS2019 без секретов](scripts/ws2019-network-inventory.ps1)

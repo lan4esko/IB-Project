@@ -1,0 +1,13 @@
+# Applied last, over the EXISTING six Compose layers used by v0.5.
+services:
+  ib-api:
+    image: ib-platform-api:0.5-gateway.1
+    environment:
+      IB_GATEWAY_API_KEY: "${IB_GATEWAY_API_KEY:?Add a 32+ character random key to .env}"
+      IB_GATEWAY_SEARCH_MODE: "lexical"
+      IB_GATEWAY_MAX_TOKENS: "192"
+      IB_GATEWAY_LLM_TIMEOUT_SEC: "90"
+
+  open-webui:
+    networks:
+      - ai_backend

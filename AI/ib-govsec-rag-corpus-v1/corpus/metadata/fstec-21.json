@@ -1,0 +1,17 @@
+{
+  "id": "fstec-21",
+  "title": "Приказ ФСТЭК от 18.02.2013 №21 — меры защиты ПДн в ИСПДн",
+  "group": "ПДн",
+  "date": "2013-02-18",
+  "url": "https://regulhub.kaspersky.ru/upload/iblock/8aa/afqa7zcx5ggk77vg0g95r0xmbniciglq.pdf",
+  "landing": "https://regulhub.kaspersky.ru/decree/prikaz-21",
+  "status": "edition_unverified",
+  "notes": "В PDF редакция от 14.05.2020. Проверить последующие изменения.",
+  "retrieved_at": "2026-10-15T17:37:11.341030+00:00",
+  "download": {
+    "id": "fstec-21",
+    "status": "downloaded",
+    "bytes": 185775,
+    "sha256": "6f1f80ade65a4cb9a18a5124f8e6676d9a8d60b860416d5317caf068d7997fb5"
+  }
+}

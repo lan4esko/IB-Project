@@ -1,0 +1,17 @@
+{
+  "id": "fsb-524",
+  "title": "Приказ ФСБ от 24.10.2022 №524 — криптографическая защита сведений в ГИС",
+  "group": "СКЗИ",
+  "date": "2022-10-24",
+  "url": "https://regulhub.kaspersky.ru/upload/iblock/cc2/4e81zbxw9h11ob7afkdvhh3irh4zmhhs.pdf",
+  "landing": "https://regulhub.kaspersky.ru/decree/prikaz-524",
+  "status": "edition_unverified",
+  "notes": "Проверить действующую редакцию и конкретную применимость.",
+  "retrieved_at": "2026-10-15T17:37:20.586797+00:00",
+  "download": {
+    "id": "fsb-524",
+    "status": "downloaded",
+    "bytes": 192482,
+    "sha256": "2f8cf794ba2567372f1400e97f9857ee889d6b4980528aa355f8c974d08fea90"
+  }
+}

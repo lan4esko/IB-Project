@@ -1,0 +1,12 @@
+# Layer after compose.yaml, compose.backend.yaml, compose.postgres.yaml, compose.auth.yaml
+services:
+  ib-api:
+    image: ib-platform-api:0.4.0
+    environment:
+      IB_DOCUMENTS_ROOT: /documents
+      IB_MAX_UPLOAD_MB: "10"
+    volumes:
+      - ib_documents_data:/documents
+volumes:
+  ib_documents_data:
+    name: ib-platform_documents_data

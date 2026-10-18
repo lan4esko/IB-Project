@@ -1,0 +1,6 @@
+services:
+  ib-api:
+    environment:
+      IB_GATEWAY_MAX_TOKENS: "384"
+      IB_GATEWAY_LLM_TIMEOUT_SEC: "120"
+      IB_GATEWAY_SEARCH_MODE: "lexical"

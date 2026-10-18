@@ -39,10 +39,27 @@
 *.swp
 
 # Historical release packages
-/CMDB/oi-registry-v0.2/
-/CMDB/oi-registry-v0.3/
-/CMDB/oi-registry-v0.4/
 
 # Review these projects separately before tracking
-/AI/
-/open-project/
+
+# Secrets
+**/.env
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+
+# Backups and databases
+**/backups/
+**/BACKUPS/
+*.dump
+*.pgdump
+*.db
+*.sqlite
+
+# Python runtime
+**/__pycache__/
+*.pyc
+
+# Local infrastructure inventory
+/docs/local/inventory-*.md

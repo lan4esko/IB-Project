@@ -1,0 +1,8 @@
+flowchart TB
+  CLIENT[Клиент VLAN] --> ROUTER[Маршрутизатор / коммутатор LAN]
+  ROUTER -->|192.168.50.20:8443 или :443| VNIC[Debian VirtualBox Bridged NIC\n192.168.50.20]
+  WIN[Windows Server 2019\n192.168.50.10] -.->|VirtualBox bridged driver\nобщая физическая NIC| VNIC
+  VNIC --> EDGE[Debian Nginx TLS reverse proxy]
+  EDGE --> OI[OI Registry localhost:8085]
+  EDGE --> OP[OpenProject Apache]
+  EDGE -.-> WEBUI[Open WebUI после допуска]

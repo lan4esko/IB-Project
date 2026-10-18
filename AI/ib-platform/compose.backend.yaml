@@ -1,0 +1,34 @@
+services:
+  ib-api:
+    build:
+      context: ./backend
+    image: ib-platform-api:0.1.0
+    container_name: ib-api
+    restart: unless-stopped
+    environment:
+      IB_DATABASE_URL: sqlite:////data/platform.db
+      IB_PLATFORM_API_KEY: "${IB_PLATFORM_API_KEY:?Set IB_PLATFORM_API_KEY in .env}"
+      OLLAMA_BASE_URL: http://ollama:11434
+      OPENPROJECT_URL: "${OPENPROJECT_URL:-}"
+      OPENPROJECT_API_KEY: "${OPENPROJECT_API_KEY:-}"
+      OPENPROJECT_CA_BUNDLE: "${OPENPROJECT_CA_BUNDLE:-}"
+    ports:
+      - "127.0.0.1:8001:8000"
+    volumes:
+      - ib_backend_data:/data
+      - ./certs:/certs:ro
+    networks:
+      - ai_backend
+    extra_hosts:
+      - "srv-debian:host-gateway"
+    depends_on:
+      - ollama
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 128
+    mem_limit: 256m
+
+volumes:
+  ib_backend_data:

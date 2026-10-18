@@ -1,0 +1,17 @@
+{
+  "id": "fsb-77",
+  "title": "Приказ ФСБ от 13.02.2023 №77 — взаимодействие операторов ПДн с ГосСОПКА",
+  "group": "ГосСОПКА",
+  "date": "2023-02-13",
+  "url": "https://regulhub.kaspersky.ru/upload/iblock/bba/gar6n858u047axhlc32d9foqoqb7b7tk.pdf",
+  "landing": "https://regulhub.kaspersky.ru/decree/prikaz-77",
+  "status": "scan_ocr_required",
+  "notes": "PDF не имеет извлекаемого текстового слоя в веб-индексе; необходим OCR.",
+  "retrieved_at": "2026-10-15T17:37:31.977717+00:00",
+  "download": {
+    "id": "fsb-77",
+    "status": "downloaded",
+    "bytes": 273016,
+    "sha256": "efece54017e2e02d8ea667bacad77576d98de20ed887c4832b3309cddd0a475d"
+  }
+}

@@ -1,0 +1,318 @@
+#!/usr/bin/env python3
+"""Public PDF downloader -> paginated UTF-8 RAG Markdown -> optional IB Platform v0.5 import.
+
+Stdlib only. External commands: pdfinfo, pdftotext; optional pdftoppm/tesseract for OCR.
+No browser scraping, no secrets in args or files. Sites listed explicitly in catalog.json.
+"""
+from __future__ import annotations
+import argparse
+import datetime as dt
+import getpass
+import hashlib
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+import uuid
+from pathlib import Path
+
+HOME = Path(__file__).resolve().parent
+CATALOG = json.loads((HOME / 'catalog.json').read_text(encoding='utf-8'))
+WORK = HOME / 'corpus'
+FILES = WORK / 'pdf'
+TEXT = WORK / 'rag'
+META = WORK / 'metadata'
+MAX_DOWNLOAD = 18 * 1024 * 1024
+MAX_PART_CHARS = 11500  # v0.5: <=48 chunks, each 480 chars/70 overlap
+MIN_PAGE_TEXT = 45
+MAX_FETCHES = 100
+ALLOWED_HOSTS = {'regulhub.kaspersky.ru', '117fstec.credos.ru'}
+
+
+def save_json(path, obj):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + '.new')
+    tmp.write_text(json.dumps(obj, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+    tmp.replace(path)
+
+
+def expected_pdf(path):
+    try:
+        return path.stat().st_size > 1000 and path.open('rb').read(5) == b'%PDF-'
+    except FileNotFoundError:
+        return False
+
+
+def fetch_document(item, wait=1.0):
+    url = item['url']
+    p = urllib.parse.urlsplit(url)
+    if p.scheme != 'https' or p.hostname not in ALLOWED_HOSTS:
+        raise ValueError('URL вне разрешённых источников')
+    dst = FILES / (item['id'] + '.pdf')
+    if expected_pdf(dst):
+        digest = hashlib.sha256(dst.read_bytes()).hexdigest()
+        return {'id': item['id'], 'status': 'present', 'bytes': dst.stat().st_size, 'sha256': digest}
+    if dst.exists():
+        dst.unlink()  # discard corrupted partial file, never trust it
+    errors = []
+    for attempt in range(3):
+        time.sleep(wait if attempt == 0 else min(15, 3 * (attempt+1)))
+        tmp = dst.with_suffix('.partial')
+        try:
+            req = urllib.request.Request(url, headers={
+                'User-Agent':'IBPlatformGovSecResearch/1.0 (offline corpus, administrator-initiated)',
+                'Accept':'application/pdf',
+            })
+            with urllib.request.urlopen(req, timeout=45) as r, tmp.open('wb') as f:
+                target = urllib.parse.urlsplit(r.geturl())
+                if target.scheme != 'https' or target.hostname not in ALLOWED_HOSTS:
+                    raise ValueError('Неожиданная переадресация')
+                h = hashlib.sha256()
+                length = 0
+                while True:
+                    chunk = r.read(1024*256)
+                    if not chunk:
+                        break
+                    length += len(chunk)
+                    if length > MAX_DOWNLOAD:
+                        raise ValueError('PDF более 18 МБ — пропущен')
+                    h.update(chunk)
+                    f.write(chunk)
+            if not expected_pdf(tmp):
+                raise ValueError('Сервер вернул не PDF либо слишком маленький файл')
+            tmp.replace(dst)
+            return {'id': item['id'], 'status': 'downloaded', 'bytes': length, 'sha256': h.hexdigest()}
+        except Exception as e:
+            errors.append(str(e)[:220])
+            tmp.unlink(missing_ok=True)
+    return {'id': item['id'], 'status': 'error', 'detail': '; '.join(errors[-2:])}
+
+
+def download(args):
+    FILES.mkdir(parents=True, exist_ok=True)
+    META.mkdir(parents=True, exist_ok=True)
+    results = []
+    for i, item in enumerate(CATALOG['documents'], 1):
+        if args.id and item['id'] not in args.id:
+            continue
+        print(f'[{i}/{len(CATALOG["documents"])}] PDF: {item["id"]}', flush=True)
+        result = fetch_document(item)
+        print(f'  {result["status"]}: {result.get("bytes", result.get("detail", ""))}', flush=True)
+        results.append(result)
+        save_json(META / (item['id'] + '.json'), dict(item, retrieved_at=dt.datetime.now(dt.timezone.utc).isoformat(), download=result))
+    save_json(WORK / 'download_report.json', results)
+    print(f'Готово. Успешно: {sum(r["status"] != "error" for r in results)}/{len(results)}')
+
+
+def run(cmd, timeout=120):
+    return subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=timeout).stdout
+
+
+def pdf_pages(src):
+    raw = run(['pdftotext', '-layout', '-enc', 'UTF-8', str(src), '-'], 180)
+    pages = raw.split('\f')
+    # Only the last empty element is the trailing form-feed sentinel.
+    # Earlier empty elements represent scanned pages and MUST be preserved for OCR.
+    if pages and not pages[-1].strip():
+        pages.pop()
+    # Some image-only PDFs return no text/form-feed at all. Recover the real page count.
+    metadata = run(['pdfinfo', str(src)], 60)
+    match = re.search(r'^Pages:\s+(\d+)\s*$', metadata, re.MULTILINE)
+    if not match:
+        raise ValueError('Не удалось определить количество страниц PDF через pdfinfo')
+    page_count = int(match.group(1))
+    if page_count < 1 or page_count > 4000:
+        raise ValueError('Недопустимое число страниц PDF')
+    if len(pages) < page_count:
+        pages.extend([''] * (page_count - len(pages)))
+    return pages[:page_count]
+
+
+def ocr_page(pdf, num):
+    if not shutil.which('tesseract') or not shutil.which('pdftoppm'):
+        return ''
+    with tempfile.TemporaryDirectory(prefix='govsec-ocr-') as d:
+        dest = str(Path(d)/'page')
+        run(['pdftoppm','-f',str(num),'-l',str(num),'-r','140','-singlefile','-png',str(pdf),dest], 150)
+        return run(['tesseract',dest + '.png','stdout','-l','rus+eng','--psm','3'], 180)
+
+
+def pack_parts(item, pages):
+    """Split by page, oversized page by paragraphs/chars, respecting existing v0.5 chunk limits."""
+    chunks=[]
+    missing=[]
+    pdf = FILES / (item['id'] + '.pdf')
+    for i, page in enumerate(pages, 1):
+        content = re.sub(r'\n{4,}', '\n\n', page).strip()
+        if len(content) < MIN_PAGE_TEXT:
+            content = ocr_page(pdf, i) if ARGS.ocr else ''
+        if len(content) < MIN_PAGE_TEXT:
+            missing.append(i)
+            continue
+        # Preserve PDF page reference in every segment even on a very long page.
+        while content:
+            piece, content = content[:8600], content[8600:]
+            chunks.append(f'[Страница PDF: {i}]\n{piece}\n')
+    result=[]
+    cur=''
+    for piece in chunks:
+        if len(cur) + len(piece) > MAX_PART_CHARS and cur:
+            result.append(cur)
+            cur=''
+        cur += piece + '\n'
+    if cur:
+        result.append(cur)
+    return result, missing
+
+
+def prepare(args):
+    if not shutil.which('pdftotext'):
+        raise SystemExit('Установи poppler-utils: apt-get install -y poppler-utils')
+    if args.ocr and (not shutil.which('tesseract') or not shutil.which('pdftoppm')):
+        raise SystemExit('Для OCR: apt-get install -y tesseract-ocr tesseract-ocr-rus tesseract-ocr-eng poppler-utils')
+    TEXT.mkdir(parents=True, exist_ok=True)
+    report = []
+    for item in CATALOG['documents']:
+        if args.id and item['id'] not in args.id:
+            continue
+        src = FILES / (item['id'] + '.pdf')
+        if not expected_pdf(src):
+            report.append({'id':item['id'], 'status':'missing_pdf'})
+            continue
+        try:
+            parts, missed = pack_parts(item, pdf_pages(src))
+            if not parts:
+                report.append({'id':item['id'], 'status':'needs_ocr_or_no_text','pages_without_text':missed})
+                continue
+            digest = hashlib.sha256(src.read_bytes()).hexdigest()
+            dest = TEXT / item['id']
+            dest.mkdir(exist_ok=True)
+            for old in dest.glob('part-*.md'):
+                old.unlink()
+            for number, part in enumerate(parts, 1):
+                prefix=(f'# {item["title"]} — часть {number}/{len(parts)}\n\n'
+                        f'Источник полного текста: {item["url"]}\n'
+                        f'Карточка документа: {item["landing"]}\n'
+                        f'Дата акта: {item["date"]}\n'
+                        f'Группа: {item["group"]}\n'
+                        f'SHA256 исходного PDF: {digest}\n'
+                        f'Статус редакции: {item["status"]}; актуальность не подтверждена.\n'
+                        f'Примечание по редакции: {item["notes"]}\n\n'
+                        '--- ТЕКСТ ИЗ PDF. СМОТРИ НОМЕРА СТРАНИЦ. ---\n\n')
+                target = dest / f'part-{number:03d}.md'
+                target.write_text(prefix + part, encoding='utf-8')
+            state={'id':item['id'], 'status':'prepared', 'parts':len(parts),
+                   'pdf_sha256':digest, 'pages_without_text':missed,
+                   'markdown_files':[str(x.relative_to(WORK)) for x in sorted(dest.glob('*.md'))]}
+            report.append(state)
+            print(f'{item["id"]}: частей={len(parts)}, без текста страниц={len(missed)}')
+        except Exception as e:
+            report.append({'id':item['id'], 'status':'error','detail':str(e)[:230]})
+            print(f'{item["id"]}: ОШИБКА: {e}')
+    save_json(WORK / 'prepare_report.json', report)
+    print('Готово. Отчёт corpus/prepare_report.json')
+
+
+def json_request(url, payload, token=None, timeout=90):
+    headers={'Content-Type':'application/json'}
+    if token:
+        headers['Authorization']='Bearer '+token
+    data=json.dumps(payload, ensure_ascii=False).encode('utf-8')
+    req=urllib.request.Request(url, data=data, headers=headers)
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.load(r)
+
+
+def multipart_upload(url, token, title, filename, content):
+    boundary='----------IB-'+uuid.uuid4().hex
+    start=(f'--{boundary}\r\nContent-Disposition: form-data; name="title"\r\n\r\n{title}\r\n'
+           f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="{filename}"\r\n'
+           'Content-Type: text/markdown\r\n\r\n').encode('utf-8')
+    end=f'\r\n--{boundary}--\r\n'.encode()
+    req=urllib.request.Request(url, data=start+content+end,
+        headers={'Authorization':'Bearer '+token, 'Content-Type':f'multipart/form-data; boundary={boundary}'})
+    with urllib.request.urlopen(req, timeout=120) as r:
+        return json.load(r)
+
+
+def import_api(args):
+    base=args.api_url.rstrip('/')
+    if not (base.startswith('http://127.0.0.1:') or base.startswith('http://localhost:') or base.startswith('https://')):
+        raise SystemExit('API: разрешены localhost HTTP или HTTPS (не отправляй пароль по сети в HTTP)')
+    state_path=WORK / 'import_state.json'
+    state=json.loads(state_path.read_text(encoding='utf-8')) if state_path.exists() else {}
+    pwd=getpass.getpass('Пароль admin IB Platform (не сохраняется): ')
+    try:
+        token=json_request(base+'/api/v1/auth/login', {'username':args.username,'password':pwd})['access_token']
+    finally:
+        del pwd
+    success=0
+    fail=0
+    for item in CATALOG['documents']:
+        if args.id and item['id'] not in args.id:
+            continue
+        for path in sorted((TEXT/item['id']).glob('part-*.md')):
+            rel=str(path.relative_to(TEXT))
+            content=path.read_bytes()
+            sha=hashlib.sha256(content).hexdigest()
+            if rel in state and state[rel].get('sha256') == sha and state[rel].get('indexed'):
+                print('Уже проиндексировано:',rel)
+                continue
+            if rel in state and state[rel].get('sha256') == sha:
+                docid=state[rel]['document_id']
+            else:
+                title=f'{item["id"]} | {item["title"]} | {path.stem}'[:298]
+                try:
+                    doc=multipart_upload(base+'/api/v1/documents',token,title,path.name,content)
+                    docid=doc['id']
+                    state[rel]={'document_id':docid,'sha256':sha,'indexed':False}
+                    save_json(state_path,state)
+                except Exception as e:
+                    print('Не удалось загрузить',rel, str(e)[:180]);fail+=1;continue
+            try:
+                ans=json_request(base+f'/api/v1/rag/documents/{docid}/index',{'mode':'lexical'},token,timeout=140)
+                if ans.get('indexed_chunks',0) < 1:
+                    raise ValueError('Ноль фрагментов')
+                state[rel]['indexed']=True
+                state[rel]['indexed_chunks']=ans['indexed_chunks']
+                save_json(state_path,state)
+                success+=1
+                print(f'OK {rel}: document_id={docid}; fragments={ans["indexed_chunks"]}')
+            except Exception as e:
+                print('Не удалось индексировать',rel, str(e)[:180]);fail+=1
+    print(f'Импорт завершён. Новых/восстановленных: {success}, ошибок: {fail}. Состояние {state_path}')
+
+
+def status(_):
+    for fn in ('download_report.json','prepare_report.json','import_state.json'):
+        p=WORK/fn
+        print(fn, ('есть, %d байт'%p.stat().st_size) if p.exists() else 'отсутствует')
+    print('PDF файлов:',len(list(FILES.glob('*.pdf'))) if FILES.exists() else 0)
+    print('Markdown частей:',len(list(TEXT.glob('*/*.md'))) if TEXT.exists() else 0)
+
+
+def main():
+    global ARGS
+    parser=argparse.ArgumentParser(description='GovSec RAG corpus for IB Platform v0.5 (download PDF -> MD -> RAG)')
+    p=parser.add_subparsers(dest='action',required=True)
+    for verb in ('download','prepare','import','status'):
+        q=p.add_parser(verb)
+        if verb != 'status':
+            q.add_argument('--id',action='append',help='ID документа из catalog.json (можно несколько раз)')
+        if verb == 'prepare':
+            q.add_argument('--ocr',action='store_true',help='Tesseract OCR для PDF-страниц без текста')
+        if verb == 'import':
+            q.add_argument('--api-url',default='http://127.0.0.1:8001')
+            q.add_argument('--username',default='admin')
+    ARGS=parser.parse_args()
+    {'download':download,'prepare':prepare,'import':import_api,'status':status}[ARGS.action](ARGS)
+
+if __name__=='__main__':
+    main()

@@ -1,0 +1,33 @@
+# DEMO ONLY — Codex must validate actual model names, schemas, permissions and API
+profiles:
+  - id: ADV-ADM
+    name: Советник системного администратора
+    knowledge_mode: documents_only
+    prompt_template: prompts/admin.md
+    code_execution: false
+    direct_tools: [read_authorized_knowledge]
+  - id: ADV-SEC
+    name: Советник по информационной безопасности
+    knowledge_mode: documents_only
+    prompt_template: prompts/security.md
+    code_execution: false
+    direct_tools: [read_authorized_knowledge]
+  - id: ADV-NORM
+    name: Нормативный советник
+    knowledge_mode: documents_only
+    require_clause_citations: true
+    prompt_template: prompts/normative.md
+    code_execution: false
+    direct_tools: [read_authorized_knowledge]
+  - id: ADV-ORDER
+    name: Конструктор приказов и регламентов
+    knowledge_mode: documents_only
+    prompt_template: prompts/orders.md
+    workflow: draft_review_export
+    code_execution: false
+  - id: ADV-REPORT
+    name: Аналитик отчётов и планов
+    knowledge_mode: documents_only
+    prompt_template: prompts/reports.md
+    workflow: draft_review_export
+    code_execution: false

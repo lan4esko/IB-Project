@@ -1,0 +1,144 @@
+{
+  "snapshot_date": "2026-10-14",
+  "catalog_source": "https://regulhub.kaspersky.ru/industry/gosudarstvennyy-sektor",
+  "material_type": "directory_metadata_only_not_regulation_texts",
+  "data_provenance": "Vendor overview cross-checked selectively with secondary legal text sources; not official publication corpus",
+  "acts": [
+    {
+      "id": "149-fz",
+      "title": "Федеральный закон от 27.07.2006 № 149-ФЗ",
+      "scope_hint": "Базовое регулирование информации и её защиты",
+      "area": "общий",
+      "overview_url": "https://regulhub.kaspersky.ru/laws/fz-149",
+      "primary_source": "https://pravo.gov.ru/",
+      "primary_text_loaded": false,
+      "edition_verified": false,
+      "verification": "Требуется сверка полного текста, изменений и применимости по официальному источнику перед нормативным заключением."
+    },
+    {
+      "id": "152-fz",
+      "title": "Федеральный закон от 27.07.2006 № 152-ФЗ",
+      "scope_hint": "Персональные данные; оценка применимости по факту обработки",
+      "area": "ИСПДн/ПДн",
+      "overview_url": "https://regulhub.kaspersky.ru/laws/fz-152",
+      "primary_source": "https://pravo.gov.ru/",
+      "primary_text_loaded": false,
+      "edition_verified": false,
+      "verification": "Требуется сверка полного текста, изменений и применимости по официальному источнику перед нормативным заключением."
+    },
+    {
+      "id": "187-fz",
+      "title": "Федеральный закон от 26.07.2017 № 187-ФЗ",
+      "scope_hint": "Безопасность критической информационной инфраструктуры",
+      "area": "КИИ",
+      "overview_url": "https://regulhub.kaspersky.ru/laws/fz-187",
+      "primary_source": "https://pravo.gov.ru/",
+      "primary_text_loaded": false,
+      "edition_verified": false,
+      "verification": "Требуется сверка полного текста, изменений и применимости по официальному источнику перед нормативным заключением."
+    },
+    {
+      "id": "250-up",
+      "title": "Указ Президента РФ от 01.05.2022 № 250",
+      "scope_hint": "Дополнительные меры в области информационной безопасности; проверять круг адресатов",
+      "area": "госсектор",
+      "overview_url": "https://regulhub.kaspersky.ru/laws/up-250",
+      "primary_source": "https://pravo.gov.ru/",
+      "primary_text_loaded": false,
+      "edition_verified": false,
+      "verification": "Требуется сверка полного текста, изменений и применимости по официальному источнику перед нормативным заключением."
+    },
+    {
+      "id": "676-pp",
+      "title": "Постановление Правительства РФ от 06.07.2015 № 676",
+      "scope_hint": "Жизненный цикл государственных информационных систем",
+      "area": "ГИС",
+      "overview_url": "https://regulhub.kaspersky.ru/decree/pp-676",
+      "primary_source": "https://pravo.gov.ru/",
+      "primary_text_loaded": false,
+      "edition_verified": false,
+      "verification": "Требуется сверка полного текста, изменений и применимости по официальному источнику перед нормативным заключением."
+    },
+    {
+      "id": "1119-pp",
+      "title": "Постановление Правительства РФ от 01.11.2012 № 1119",
+      "scope_hint": "Требования к защите ПДн при обработке в ИСПДн",
+      "area": "ИСПДн",
+      "overview_url": "https://regulhub.kaspersky.ru/decrees/pp-1119",
+      "primary_source": "https://pravo.gov.ru/",
+      "primary_text_loaded": false,
+      "edition_verified": false,
+      "verification": "Требуется сверка полного текста, изменений и применимости по официальному источнику перед нормативным заключением."
+    },
+    {
+      "id": "127-pp",
+      "title": "Постановление Правительства РФ от 08.02.2018 № 127",
+      "scope_hint": "Правила и критерии категорирования объектов КИИ; проверить изменения",
+      "area": "КИИ",
+      "overview_url": "https://regulhub.kaspersky.ru/decrees/pp-127",
+      "primary_source": "https://pravo.gov.ru/",
+      "primary_text_loaded": false,
+      "edition_verified": false,
+      "verification": "Требуется сверка полного текста, изменений и применимости по официальному источнику перед нормативным заключением."
+    },
+    {
+      "id": "117-fstec",
+      "title": "Приказ ФСТЭК России от 11.04.2025 № 117",
+      "scope_hint": "Защита информации в ГИС и иных ИС госорганов, ГУП и госучреждений; действует с 01.03.2026; изменения по № 137 от 08.05.2026, часть с 01.09.2026 и часть с 01.03.2027",
+      "area": "ГИС/госсектор",
+      "overview_url": "https://regulhub.kaspersky.ru/decree/prikaz-117-new",
+      "primary_source": "https://pravo.gov.ru/",
+      "primary_text_loaded": false,
+      "edition_verified": false,
+      "verification": "Требуется сверка полного текста, изменений и применимости по официальному источнику перед нормативным заключением."
+    },
+    {
+      "id": "21-fstec",
+      "title": "Приказ ФСТЭК России от 18.02.2013 № 21",
+      "scope_hint": "Организационные и технические меры защиты ПДн в ИСПДн",
+      "area": "ИСПДн",
+      "overview_url": "https://regulhub.kaspersky.ru/decree/prikaz-21",
+      "primary_source": "https://pravo.gov.ru/",
+      "primary_text_loaded": false,
+      "edition_verified": false,
+      "verification": "Требуется сверка полного текста, изменений и применимости по официальному источнику перед нормативным заключением."
+    },
+    {
+      "id": "77-fstec",
+      "title": "Приказ ФСТЭК России от 29.04.2021 № 77",
+      "scope_hint": "Порядок аттестации объектов информатизации; не путать с приказами № 77 иных ведомств",
+      "area": "аттестация",
+      "overview_url": "https://regulhub.kaspersky.ru/decree/prikaz-fstec-77",
+      "primary_source": "https://pravo.gov.ru/",
+      "primary_text_loaded": false,
+      "edition_verified": false,
+      "verification": "Требуется сверка полного текста, изменений и применимости по официальному источнику перед нормативным заключением."
+    },
+    {
+      "id": "235-fstec",
+      "title": "Приказ ФСТЭК России от 25.12.2017 № 235",
+      "scope_hint": "Создание систем безопасности значимых объектов КИИ",
+      "area": "КИИ",
+      "overview_url": "https://regulhub.kaspersky.ru/regulators/gosudarstvennye-regulyatory/fstek",
+      "primary_source": "https://pravo.gov.ru/",
+      "primary_text_loaded": false,
+      "edition_verified": false,
+      "verification": "Требуется сверка полного текста, изменений и применимости по официальному источнику перед нормативным заключением."
+    },
+    {
+      "id": "239-fstec",
+      "title": "Приказ ФСТЭК России от 25.12.2017 № 239",
+      "scope_hint": "Требования по обеспечению безопасности значимых объектов КИИ; проверить действующую редакцию",
+      "area": "КИИ",
+      "overview_url": "https://regulhub.kaspersky.ru/decree/prikaz-239",
+      "primary_source": "https://pravo.gov.ru/",
+      "primary_text_loaded": false,
+      "edition_verified": false,
+      "verification": "Требуется сверка полного текста, изменений и применимости по официальному источнику перед нормативным заключением."
+    }
+  ],
+  "obsolete_acts_not_as_current": [
+    "Приказ ФСТЭК России от 11.02.2013 № 17 (утратил силу с 01.03.2026 в связи с приказом №117)"
+  ],
+  "human_review_required": true
+}

@@ -1,0 +1,17 @@
+{
+  "id": "up-250",
+  "title": "Указ Президента РФ от 01.05.2022 №250 — дополнительные меры по ИБ",
+  "group": "Госуправление",
+  "date": "2022-05-01",
+  "url": "https://regulhub.kaspersky.ru/upload/iblock/730/sxa6bnefdtsofxnpgop35k3dwb4iehqt.pdf",
+  "landing": "https://regulhub.kaspersky.ru/laws/up-250",
+  "status": "edition_unverified",
+  "notes": "В найденном PDF указана редакция от 13.06.2024; проверить последующие изменения.",
+  "retrieved_at": "2026-10-15T17:37:01.262302+00:00",
+  "download": {
+    "id": "up-250",
+    "status": "downloaded",
+    "bytes": 179162,
+    "sha256": "c575b3eec1f1065b6ad6d073f2978cfad45e76b351fa4d26b525c8e06479b852"
+  }
+}

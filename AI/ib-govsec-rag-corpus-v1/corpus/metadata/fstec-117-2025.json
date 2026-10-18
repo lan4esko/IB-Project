@@ -1,0 +1,17 @@
+{
+  "id": "fstec-117-2025",
+  "title": "Приказ ФСТЭК России от 11.04.2025 №117 — требования защиты информации в ГИС и ИС госорганов",
+  "group": "ГИС",
+  "date": "2025-04-11",
+  "url": "https://regulhub.kaspersky.ru/upload/iblock/38a/8hlbzkx0n7hsn6db4wcpi5y86zyw6bn2.pdf",
+  "landing": "https://regulhub.kaspersky.ru/decree/prikaz-117-new",
+  "status": "base_amended_2026",
+  "notes": "Исходный текст без интегрированных изменений приказа №137 от 08.05.2026; №17 отменен с 01.03.2026. Сверять совместно с №137.",
+  "retrieved_at": "2026-10-15T17:36:41.544154+00:00",
+  "download": {
+    "id": "fstec-117-2025",
+    "status": "downloaded",
+    "bytes": 307599,
+    "sha256": "11342a91a6227b97357ff6cef31bae9f6fa126078d5ddf5759d6769c81cc711a"
+  }
+}

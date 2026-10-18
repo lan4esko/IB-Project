@@ -1,0 +1,17 @@
+{
+  "id": "fsb-282",
+  "title": "Приказ ФСБ от 19.06.2019 №282 — реагирование на компьютерные инциденты в КИИ",
+  "group": "ГосСОПКА",
+  "date": "2019-06-19",
+  "url": "https://regulhub.kaspersky.ru/upload/iblock/485/qmt7210a1pgatj91r9ntsya6473o6ewu.PDF",
+  "landing": "https://regulhub.kaspersky.ru/decree/prikaz-282",
+  "status": "edition_unverified",
+  "notes": "Описание сайта сообщает об изменениях 2022; проверить их наличие в самом PDF.",
+  "retrieved_at": "2026-10-15T17:37:25.200518+00:00",
+  "download": {
+    "id": "fsb-282",
+    "status": "downloaded",
+    "bytes": 202284,
+    "sha256": "09245e1bb07720310364772ead2e84840b1c624e1cd8288174fb3a51f382139f"
+  }
+}

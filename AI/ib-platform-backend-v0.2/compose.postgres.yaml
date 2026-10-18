@@ -1,0 +1,43 @@
+services:
+  ib-db:
+    image: postgres:17-alpine
+    container_name: ib-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ibplatform
+      POSTGRES_USER: ibplatform
+      POSTGRES_PASSWORD: "${IB_PG_PASSWORD:?Set IB_PG_PASSWORD in .env}"
+      PGDATA: /var/lib/postgresql/data/pgdata
+    command:
+      - postgres
+      - -c
+      - shared_buffers=64MB
+      - -c
+      - max_connections=20
+    volumes:
+      - ib_postgres_data:/var/lib/postgresql/data
+    networks:
+      - ai_backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ibplatform -d ibplatform"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 384m
+    pids_limit: 100
+
+  ib-api:
+    image: ib-platform-api:0.2.0
+    environment:
+      IB_DATABASE_URL: "postgresql+psycopg://ibplatform:${IB_PG_PASSWORD:?Set IB_PG_PASSWORD in .env}@ib-db:5432/ibplatform"
+    depends_on:
+      ib-db:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+
+volumes:
+  ib_postgres_data:
+    name: ib-platform_postgres_data

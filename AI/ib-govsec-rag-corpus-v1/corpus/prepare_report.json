@@ -1,0 +1,22 @@
+[
+  {
+    "id": "fstec-137-2026",
+    "status": "prepared",
+    "parts": 1,
+    "pdf_sha256": "ef52e1848aa04feac5589593de27d9eb71d37ab4bb1335f21b9ff5b1c47432d7",
+    "pages_without_text": [],
+    "markdown_files": [
+      "rag/fstec-137-2026/part-001.md"
+    ]
+  },
+  {
+    "id": "fsb-77",
+    "status": "prepared",
+    "parts": 1,
+    "pdf_sha256": "efece54017e2e02d8ea667bacad77576d98de20ed887c4832b3309cddd0a475d",
+    "pages_without_text": [],
+    "markdown_files": [
+      "rag/fsb-77/part-001.md"
+    ]
+  }
+]

@@ -1,0 +1,6 @@
+# Layer over existing compose.yaml, compose.backend.yaml, compose.postgres.yaml
+services:
+  ib-api:
+    image: ib-platform-api:0.3.0
+    environment:
+      IB_ALLOW_LEGACY_API_KEY: "false"

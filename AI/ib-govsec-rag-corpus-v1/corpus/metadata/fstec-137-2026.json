@@ -1,0 +1,17 @@
+{
+  "id": "fstec-137-2026",
+  "title": "Приказ ФСТЭК России от 08.05.2026 №137 — изменения в приказ №117",
+  "group": "ГИС",
+  "date": "2026-05-08",
+  "url": "https://117fstec.credos.ru/files/prikaz-fstec-137-08-05-2026.pdf",
+  "landing": "https://publication.pravo.gov.ru/document/0001202608110006",
+  "status": "amendment_transitional",
+  "notes": "Основные изменения с 01.09.2026; пункт 7 приложения — с 01.03.2027. Сканы могут требовать OCR. Контрольный источник — официальная публикация.",
+  "retrieved_at": "2026-10-15T17:36:48.053827+00:00",
+  "download": {
+    "id": "fstec-137-2026",
+    "status": "downloaded",
+    "bytes": 174732,
+    "sha256": "ef52e1848aa04feac5589593de27d9eb71d37ab4bb1335f21b9ff5b1c47432d7"
+  }
+}

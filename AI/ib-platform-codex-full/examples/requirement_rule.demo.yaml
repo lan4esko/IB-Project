@@ -1,0 +1,17 @@
+# Entirely synthetic test data; not a real FSTEC clause.
+rule_id: DEMO-LIFECYCLE-001
+status: draft
+source:
+  act_id: DEMO-ACT
+  edition: demo-1
+  clause: '1.1'
+applicability:
+  all:
+    - field: lifecycle_phase
+      operator: in
+      values: [design, implementation]
+required_evidence:
+  - kind: design_review_act
+    mandatory: true
+missing_evidence_status: EVIDENCE_NOT_FOUND
+human_approval_required: true

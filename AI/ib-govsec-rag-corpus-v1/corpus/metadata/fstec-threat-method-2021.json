@@ -1,0 +1,17 @@
+{
+  "id": "fstec-threat-method-2021",
+  "title": "Методика оценки угроз безопасности информации ФСТЭК России от 05.02.2021",
+  "group": "Методология",
+  "date": "2021-02-05",
+  "url": "https://regulhub.kaspersky.ru/upload/iblock/087/bgg7ssdy0tvo2ib1eu0lzznhqodult8o.pdf",
+  "landing": "https://regulhub.kaspersky.ru/regulators/gosudarstvennye-regulyatory/fstek",
+  "status": "methodology_verify",
+  "notes": "Методический документ, отдельно от нормативных правовых актов; проверять статус и редакцию.",
+  "retrieved_at": "2026-10-15T17:37:39.822386+00:00",
+  "download": {
+    "id": "fstec-threat-method-2021",
+    "status": "downloaded",
+    "bytes": 2744210,
+    "sha256": "dfb473137de462f8c10fbbdccbea62bd136925e803e1c58aa6d4e790325c49b1"
+  }
+}

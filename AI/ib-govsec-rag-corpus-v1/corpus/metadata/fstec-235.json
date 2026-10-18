@@ -1,0 +1,17 @@
+{
+  "id": "fstec-235",
+  "title": "Приказ ФСТЭК от 21.12.2017 №235 — создание системы безопасности значимых объектов КИИ",
+  "group": "КИИ",
+  "date": "2017-12-21",
+  "url": "https://regulhub.kaspersky.ru/upload/iblock/5f1/6wm2xzphopuloibokl3jqtl1nd6su03r.pdf",
+  "landing": "https://regulhub.kaspersky.ru/",
+  "status": "edition_unverified",
+  "notes": "В PDF указана редакция от 20.04.2023. Проверить изменения.",
+  "retrieved_at": "2026-10-15T17:37:18.541501+00:00",
+  "download": {
+    "id": "fstec-235",
+    "status": "downloaded",
+    "bytes": 238836,
+    "sha256": "059481395518a918bedebfa5705ec3f77a586508b0dc58ce7715003d356db2a8"
+  }
+}

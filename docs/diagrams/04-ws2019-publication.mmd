@@ -1,23 +1,7 @@
-flowchart TB
-  subgraph Users[Разрешённые пользователи]
-    CLIENT[Рабочая станция / VPN / VLAN]
-  end
-  subgraph Perimeter[Физическая сеть]
-    L3[Маршрутизатор L3 / ACL]
-    NIC[Windows Server 2019 Ethernet NIC\n192.168.50.10:443]
-  end
-  subgraph Host[Windows Server 2019 / VirtualBox]
-    PF[VirtualBox Adapter 1 NAT\nPort Forwarding TCP 443 → 8443]
-  end
-  subgraph Guest[Debian 13 VM / ZGT]
-    EDGE[Nginx reverse proxy\nTLS + SNI :8443]
-    OI[OI Registry :8085 localhost]
-    OP[OpenProject host Apache\nлокальный порт проверить]
-    WEBUI[Open WebUI\nпорт проверить]
-    DB[(PostgreSQL / Docker volumes\nне публиковать)]
-    EDGE -->|registry.zgt.test| OI
-    EDGE -->|projects.zgt.test| OP
-    EDGE -.->|ai.zgt.test после допуска| WEBUI
-    OI --> DB
-  end
-  CLIENT -->|HTTPS TCP 443| L3 --> NIC --> PF --> EDGE
+flowchart LR
+  U[Клиенты LAN] -->|HTTPS 443| W[WS2019 HOST_IP]
+  W -->|VirtualBox NAT port forwarding 443 to 443| D[Debian VM NAT]
+  D --> P[Reverse proxy]
+  P --> R[OI Registry]
+  P --> O[OpenProject]
+  P --> A[IB Platform]

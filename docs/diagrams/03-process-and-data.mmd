@@ -1,0 +1,17 @@
+sequenceDiagram
+    actor R as Ответственный ОИ (requester)
+    participant C as OI Registry
+    actor E as Оператор БД (editor)
+    participant P as PostgreSQL OI
+    participant W as oi-worker
+    participant O as OpenProject API
+    R->>C: Заявка ОИ + разрешённый документ
+    C->>P: proposal + actor/request/time
+    E->>C: Проверка / принять / отклонить
+    C->>P: Создать карточку ОИ + audit
+    W->>P: План мероприятий (без дублей)
+    E->>C: Зарегистрировать осмотр СВТ
+    C->>P: inspection + audit
+    Note over C,O: В v0.4 публикация ТОЛЬКО по ручному действию admin
+    C-->>O: Work Package POST после сверки ID/ключа
+    O-->>C: Work Package ID (либо needs_review)

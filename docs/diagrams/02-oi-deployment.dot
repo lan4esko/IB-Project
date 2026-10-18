@@ -1,0 +1,21 @@
+digraph G {
+ graph [rankdir=LR, bgcolor="white", pad="0.4", nodesep="0.45", ranksep="0.8", fontname="DejaVu Sans", label="OI Registry: логическая топология на Debian VM", labelloc=t];
+ node [fontname="DejaVu Sans", fontsize=10, shape=box, style="rounded,filled", fillcolor="#edf5f9", color="#48718a", margin="0.18,0.1"];
+ edge [fontname="DejaVu Sans",fontsize=9,color="#4a6677", arrowsize=0.65];
+ browser [label="Браузер Debian", fillcolor="#eaf2e7"];
+ subgraph cluster_oi {label="Docker Compose: oi-registry / oi_internal";color="#a2b9c8";style=rounded;
+ nginx[label="oi-web / Nginx\nlocalhost:8085"];
+ api[label="oi-api / FastAPI\nвнутренний :8000"];
+ pg[label="oi-db / PostgreSQL 17\n:5432",shape=cylinder,fillcolor="#f8f0df"];
+ docs[label="oi_documents_data",shape=cylinder,fillcolor="#f8f0df"];
+ worker[label="oi-worker\nпланирование раз в ~сутки"];
+ api->pg;api->docs;worker->pg;
+ }
+ op [label="OpenProject 17.9.1\nhost systemd + host PG",fillcolor="#ebf5ea"];
+ backup[label="CMDB/BACKUPS\n.tar.gz + .sha256",shape=folder,fillcolor="#f5eee3"];
+ browser -> nginx [label="http://127.0.0.1:8085"];
+ nginx -> api [label="/api"];
+ api -> op [style=dashed,label="опционально, вручную"];
+ pg -> backup [label="pg_dump -Fc"];
+ docs -> backup [label="tar"];
+ }

@@ -1,0 +1,22 @@
+# Additive compose override. Worker plans locally; NEVER sends to OpenProject automatically.
+services:
+  oi-api:
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    environment:
+      OI_OP_SYNC_ENABLED: ${OI_OP_SYNC_ENABLED:-false}
+      OI_OP_BASE_URL: ${OI_OP_BASE_URL:-}
+      OI_OP_API_KEY: ${OI_OP_API_KEY:-}
+      OI_OP_TYPE_ID: ${OI_OP_TYPE_ID:-}
+      OI_OP_ALLOW_LOCAL_HTTP: ${OI_OP_ALLOW_LOCAL_HTTP:-false}
+  oi-worker:
+    profiles: ["automation"]
+    image: oi-registry-oi-api:latest
+    restart: unless-stopped
+    depends_on:
+      oi-db: {condition: service_healthy}
+    environment:
+      DATABASE_URL: postgresql+psycopg://oi_registry:${OI_DB_PASSWORD}@oi-db:5432/oi_registry
+      OI_SESSION_SECRET: ${OI_SESSION_SECRET:?Existing .env required}
+      OI_REPORT_TZ: ${OI_REPORT_TZ:-Europe/Moscow}
+    command: ["sh", "-c", "while true; do python -m app.scheduler; sleep 86400; done"]
+    networks: [oi_internal]

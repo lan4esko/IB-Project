@@ -1,0 +1,52 @@
+name: oi-registry
+services:
+  oi-db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: oi_registry
+      POSTGRES_USER: oi_registry
+      POSTGRES_PASSWORD: ${OI_DB_PASSWORD:?Run scripts/install.sh first}
+    volumes:
+      - oi_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U oi_registry -d oi_registry"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [oi_internal]
+  oi-api:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      oi-db: {condition: service_healthy}
+    environment:
+      DATABASE_URL: postgresql+psycopg://oi_registry:${OI_DB_PASSWORD}@oi-db:5432/oi_registry
+      OI_SESSION_SECRET: ${OI_SESSION_SECRET:?Run scripts/install.sh first}
+      OI_COOKIE_SECURE: ${OI_COOKIE_SECURE:-false}
+      OI_DOCUMENT_ROOT: /data/documents
+    volumes:
+      - oi_documents_data:/data/documents
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health/ready', timeout=4)"]
+      interval: 15s
+      start_period: 45s
+      timeout: 5s
+      retries: 3
+    networks: [oi_internal]
+  oi-web:
+    image: nginx:stable-alpine
+    restart: unless-stopped
+    depends_on: [oi-api]
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "127.0.0.1:${OI_PORT:-8085}:80"
+    networks: [oi_internal]
+volumes:
+  oi_postgres_data:
+  oi_documents_data:
+networks:
+  oi_internal:
+    driver: bridge

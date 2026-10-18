@@ -1,0 +1,15 @@
+flowchart TB
+    subgraph DebianVM[Debian 13 / VirtualBox VM]
+      Browser[Firefox] -->|127.0.0.1:8085| Web[oi-web / nginx]
+      subgraph DockerOI[Compose project oi-registry / oi_internal]
+        Web -->|/api| API[oi-api / FastAPI]
+        API --> PG[(oi-db:5432)]
+        API --> DOC[(oi_documents_data)]
+        WORKER[oi-worker / app.scheduler] --> PG
+      end
+      OP[OpenProject systemd: web/worker/apache] --> OPDB[(host PostgreSQL)]
+      API -.->|manually approved API v3| OP
+      BAK[backup_full.sh] --> PG
+      BAK --> DOC
+      BAK --> FILE[CMDB/BACKUPS archive + SHA256]
+    end

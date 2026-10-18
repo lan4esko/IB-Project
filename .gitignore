@@ -1,0 +1,48 @@
+# Secrets and credentials
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.sample
+**/.ssh/
+*.key
+*.pem
+*.p12
+*.pfx
+
+# Database backups and runtime data
+**/backups/
+**/BACKUPS/
+**/uploads/
+**/corpus/
+**/__pycache__/
+**/.pytest_cache/
+**/.venv/
+**/node_modules/
+*.dump
+*.pgdump
+*.sqlite
+*.sqlite3
+*.db
+
+# Archives and document data
+*.tar
+*.tar.gz
+*.zip
+*.pdf
+*.docx
+*.xlsx
+
+# Logs and temporary files
+*.log
+*.bak
+*.tmp
+*.swp
+
+# Historical release packages
+/CMDB/oi-registry-v0.2/
+/CMDB/oi-registry-v0.3/
+/CMDB/oi-registry-v0.4/
+
+# Review these projects separately before tracking
+/AI/
+/open-project/

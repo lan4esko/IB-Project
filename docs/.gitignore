@@ -1,0 +1,13 @@
+# Confidential, machine-specific information: never stage
+/local/*
+!/local/README.md
+*.local.md
+*.local.json
+inventory-*.txt
+*.dump
+*.pgdump
+*.tar.gz
+*.zip
+.env
+.env.*
+!.env.example

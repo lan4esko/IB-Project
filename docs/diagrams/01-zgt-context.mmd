@@ -1,0 +1,12 @@
+flowchart LR
+    People[Сотрудники / ИБ / администраторы] --> CMDB[OI Registry: учёт ОИ и СВТ]
+    People --> OP[OpenProject: рабочие пакеты]
+    People --> WEBUI[Open WebUI]
+    WEBUI --> GATE[IB Platform: AI Gateway и RAG]
+    GATE --> LLM[Ollama]
+    GATE --> KNOW[(Нормативные документы / IB PostgreSQL)]
+    CMDB -.->|ID проекта; ручная API v3 публикация| OP
+    CMDB --> CDB[(OI PostgreSQL)]
+    CMDB --> CDOC[(Документы ОИ)]
+    CDB --> BAK[Единый локальный OI-backup]
+    CDOC --> BAK

@@ -1,0 +1,17 @@
+digraph G {
+ graph [rankdir=LR, bgcolor="white", pad="0.35", nodesep="0.6", ranksep="0.75", fontname="DejaVu Sans"];
+ node [fontname="DejaVu Sans", fontsize=11, shape=box, style="rounded,filled", color="#4b6d87", fillcolor="#edf5f9", margin="0.18,0.1"];
+ edge [fontname="DejaVu Sans", fontsize=9, color="#607d8b", arrowsize=0.7];
+ users [label="Сотрудники ИБ / администраторы",fillcolor="#e6efe9"];
+ cmdb [label="OI Registry v0.4\nОИ, СВТ, контроль, аудит"];
+ openproject [label="OpenProject 17.9.1\nпроекты и задачи"];
+ webui [label="Open WebUI\nинтерфейс советников"];
+ ib [label="IB Platform / AI Gateway\nRAG, поиск и документы"];
+ ollama [label="Ollama\nлокальные модели"];
+ oidb [label="OI PostgreSQL + документы",shape=cylinder,fillcolor="#f5f3e5"];
+ ibdb [label="IB PostgreSQL + документы",shape=cylinder,fillcolor="#f5f3e5"];
+ bak [label="CMDB/BACKUPS\nполный OI archive + SHA256",fillcolor="#f0ece8"];
+ users -> cmdb;users -> openproject;users -> webui;
+ cmdb -> oidb;cmdb -> openproject [style=dashed,label="API v3: только вручную"];
+ webui -> ib;ib -> ibdb;ib -> ollama;oidb -> bak [label="backup_full.sh"];
+}

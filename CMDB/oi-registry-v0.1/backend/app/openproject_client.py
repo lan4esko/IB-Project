@@ -49,3 +49,26 @@ def publish(activity, timeout=15):
     if not isinstance(work_id,int) or work_id<=0:
         raise ValueError('OpenProject response lacks work package id; reconcile manually')
     return work_id
+
+
+def fetch_work_package(work_package_id: int, timeout: int = 12) -> dict:
+    """Read-only status snapshot. Never changes a local completion state."""
+    endpoint, key, _ = configuration()
+    if not isinstance(work_package_id, int) or work_package_id <= 0:
+        raise ValueError("Invalid work package id")
+    auth = base64.b64encode(("apikey:" + key).encode()).decode()
+    req = Request(f"{endpoint}/api/v3/work_packages/{work_package_id}",
+                  headers={"Authorization": "Basic " + auth, "Accept": "application/hal+json"}, method="GET")
+    with urlopen(req, timeout=timeout) as response:
+        data = json.load(response)
+    if data.get("id") != work_package_id:
+        raise ValueError("Unexpected OpenProject work package id")
+    links = data.get("_links", {})
+    status = links.get("status", {}) or {}
+    return {
+        "id": work_package_id,
+        "status": str(status.get("title") or "unknown")[:120],
+        "subject": str(data.get("subject") or "")[:350],
+        "due_date": data.get("dueDate"),
+        "assignee": str((links.get("assignee") or {}).get("title") or "")[:180],
+    }

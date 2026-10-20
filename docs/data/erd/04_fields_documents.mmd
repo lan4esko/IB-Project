@@ -1,0 +1,70 @@
+erDiagram
+    FIELD_DEFINITIONS ||--o{ FIELD_VALUES : "field_id"
+    FIELD_ASSERTION_REVISIONS ||--o{ FIELD_EVIDENCE : "value_revision_id"
+    DOCUMENTS ||--o{ FIELD_EVIDENCE : "document_id"
+    FIELD_DEFINITIONS ||--o{ FIELD_VALUE_REVISIONS : "field_id"
+    FIELD_DEFINITIONS {
+        integer id PK
+        varchar_20 entity_type
+        integer scope_entity_id "NULL"
+        varchar_150 name
+        varchar_20 field_type
+        json options
+        boolean required
+        boolean active
+    }
+    FIELD_VALUES {
+        integer id PK
+        varchar_20 entity_type
+        integer entity_id
+        integer field_id FK
+        json value "NULL"
+        text value_text
+        integer updated_by FK
+        timestamptz updated_at
+    }
+    FIELD_VALUE_REVISIONS {
+        integer id PK
+        varchar_20 entity_type
+        integer entity_id
+        integer field_id FK
+        json value "NULL"
+        integer updated_by FK
+        timestamptz created_at
+    }
+    FIELD_ASSERTION_REVISIONS {
+        integer id PK
+        varchar_20 entity_type
+        integer entity_id
+        varchar_80 field_key
+        varchar_64 value_hash
+        integer changed_by FK
+        timestamptz created_at
+    }
+    FIELD_EVIDENCE {
+        integer id PK
+        varchar_20 entity_type
+        integer entity_id
+        varchar_80 field_key
+        varchar_64 value_hash
+        integer value_revision_id FK
+        integer document_id FK
+        varchar_20 kind
+        varchar_30 locator_type
+        varchar_150 locator_value
+        varchar_500 comment
+        integer created_by FK
+        timestamptz created_at
+    }
+    DOCUMENTS {
+        integer id PK
+        varchar_250 title
+        varchar_255 original_filename
+        varchar_64 storage_key UK
+        varchar_120 content_type
+        varchar_64 sha256
+        integer size_bytes
+        integer supersedes_id FK "NULL"
+        integer created_by FK
+        timestamptz created_at
+    }

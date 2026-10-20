@@ -1,4 +1,4 @@
-"""OI Registry 0.2 — CMDB, immutable OI snapshots and change review."""
+"""OI Registry v0.7.0 — consolidated registry, reviews and configurable queries."""
 from __future__ import annotations
 
 import csv
@@ -18,7 +18,7 @@ from zipfile import ZipFile, BadZipFile
 
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError, VerificationError
-from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, Request, Response, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, Response, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import and_, cast, func, or_, select, Text
@@ -32,10 +32,10 @@ from app.models import (
     FieldDefinition, FieldValue, FieldValueRevision, FieldAssertionRevision, Document,
     FieldEvidence, AuditEvent, ConfigurationBaseline, ConfigurationChange,
     AssetComponent, SharedPeripheral, AssetPeripheralAccess, AssetSecurityTool,
-    ServiceRequest, WorkEntry, AssetInspection, OIProposal, PlannedActivity, now,
+    ServiceRequest, WorkEntry, AssetInspection, OIReview, OIReviewFinding, AssetMNI, AssetZMNI, ZMNIContainerHistory, OIProposal, PlannedActivity, ControlRule, TransferApproval, SystemType, RegistryRequest, now,
 )
 
-app = FastAPI(title="OI Registry", version="0.4.0", docs_url=None, redoc_url=None)
+app = FastAPI(title="OI Registry", version="0.7.0-rc1", docs_url=None, redoc_url=None)
 AUDIT_REQUEST = ContextVar('oi_audit_request', default={})
 try:
     LOCAL_TIMEZONE = ZoneInfo(os.getenv('OI_REPORT_TZ', 'Europe/Moscow'))
@@ -64,7 +64,7 @@ SECURE_COOKIE = os.environ.get("OI_COOKIE_SECURE", "false").lower() == "true"
 DOCUMENT_ROOT = Path(os.environ.get("OI_DOCUMENT_ROOT", "/tmp/oi-registry-docs"))
 MAX_FILE_SIZE = 25 * 1024 * 1024
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".xlsx", ".txt", ".md", ".csv"}
-OI_COLUMNS = ("code", "name", "classification", "location", "status", "attestation_issued_on", "attestation_valid_until", "attestation_document_id", "attestation_notice_days", "openproject_project_id", "notes")
+OI_COLUMNS = ("code", "name", "classification", "location", "status", "attestation_issued_on", "attestation_valid_until", "attestation_document_id", "attestation_smb_path", "attestation_notice_days", "openproject_project_id", "notes")
 ASSET_COLUMNS = ("code", "oi_id", "serial_number", "inventory_number", "device_type", "model", "os_name", "os_version", "network_segment", "ip_address", "hostname", "domain_name", "seal_state", "status", "notes")
 ALL_EXPORT_COLUMNS = ("code", "oi_code", "serial_number", "inventory_number", "device_type", "model", "os_name", "os_version", "network_segment", "ip_address", "hostname", "domain_name", "seal_state", "status", "notes")
 
@@ -80,10 +80,12 @@ class OIInput(BaseModel):
     status: str = Field(default='formation',max_length=40)
     attestation_issued_on: date | None = None
     attestation_valid_until: date | None = None
-    attestation_document_id: int | None = Field(default=None,ge=1)
+    attestation_document_id: int | None = Field(default=None,ge=1)  # compatibility only
+    attestation_smb_path: str = Field(default="", max_length=2048)
     attestation_notice_days: int = Field(default=90,ge=1,le=730)
     openproject_project_id: int | None = Field(default=None,ge=1)
     notes: str = Field(default='',max_length=10000)
+    custom_fields: dict[str, Any] = Field(default_factory=dict)
 
 class OIPatch(BaseModel):
     code: str | None = Field(default=None,min_length=1,max_length=80)
@@ -93,14 +95,16 @@ class OIPatch(BaseModel):
     status: str | None = Field(default=None,max_length=40)
     attestation_issued_on: date | None = None
     attestation_valid_until: date | None = None
-    attestation_document_id: int | None = Field(default=None,ge=1)
+    attestation_document_id: int | None = Field(default=None,ge=1)  # compatibility only
+    attestation_smb_path: str | None = Field(default=None, max_length=2048)
     attestation_notice_days: int | None = Field(default=None,ge=1,le=730)
     openproject_project_id: int | None = Field(default=None,ge=1)
     notes: str | None = Field(default=None,max_length=10000)
+    custom_fields: dict[str, Any] = Field(default_factory=dict)
 
 class AssetInput(BaseModel):
     code: str = Field(min_length=1, max_length=80)
-    oi_id: int = Field(ge=1)
+    oi_id: int | None = Field(default=None, ge=1)
     serial_number: str = Field(default="", max_length=150)
     inventory_number: str = Field(default="", max_length=150)
     device_type: str = Field(default="", max_length=100)
@@ -114,6 +118,11 @@ class AssetInput(BaseModel):
     seal_state: Literal["unknown", "sealed", "opened", "unsealed_after_repair", "seal_damaged", "not_applicable"] = "unknown"
     status: str = Field(default="operational", max_length=40)
     notes: str = Field(default="", max_length=10000)
+    savz_name: str = Field(default='', max_length=200)
+    savz_version: str = Field(default='', max_length=120)
+    szi_nsd_name: str = Field(default='', max_length=200)
+    szi_nsd_version: str = Field(default='', max_length=120)
+    custom_fields: dict[str, Any] = Field(default_factory=dict)
 
 class AssetPatch(BaseModel):
     code: str | None = Field(default=None, min_length=1, max_length=80)
@@ -131,9 +140,14 @@ class AssetPatch(BaseModel):
     seal_state: Literal["unknown", "sealed", "opened", "unsealed_after_repair", "seal_damaged", "not_applicable"] | None = None
     status: str | None = Field(default=None, max_length=40)
     notes: str | None = Field(default=None, max_length=10000)
+    savz_name: str | None = Field(default=None, max_length=200)
+    savz_version: str | None = Field(default=None, max_length=120)
+    szi_nsd_name: str | None = Field(default=None, max_length=200)
+    szi_nsd_version: str | None = Field(default=None, max_length=120)
+    custom_fields: dict[str, Any] = Field(default_factory=dict)
 
 class FieldCreate(BaseModel):
-    entity_type: Literal["oi", "asset"]
+    entity_type: Literal["oi", "asset", "request"]
     scope_entity_id: int | None = Field(default=None, ge=1)
     name: str = Field(min_length=1, max_length=150)
     field_type: Literal["text", "number", "date", "boolean", "select"] = "text"
@@ -229,7 +243,7 @@ def admin_only(user: User = Depends(current_user)):
 
 
 def entity(db: DBSession, entity_type: str, entity_id: int):
-    model = {"oi": InformationObject, "asset": Asset}.get(entity_type)
+    model = {"oi": InformationObject, "asset": Asset, "request": RegistryRequest}.get(entity_type)
     if not model:
         raise HTTPException(422, "Неизвестный тип сущности")
     record = db.get(model, entity_id)
@@ -316,6 +330,53 @@ def validate_field(definition: FieldDefinition, value):
     return value
 
 
+
+def normalize_custom_fields(db: DBSession, entity_type: str, submitted: dict, *, entity_id: int | None = None, creating: bool = False):
+    """Validate admin-defined fields before changing system rows; no client-supplied names/SQL."""
+    if len(submitted) > 200:
+        raise HTTPException(422, 'Слишком много пользовательских полей')
+    definitions = list(db.scalars(select(FieldDefinition).where(
+        FieldDefinition.entity_type == entity_type, FieldDefinition.active.is_(True),
+        or_(FieldDefinition.scope_entity_id.is_(None), FieldDefinition.scope_entity_id == entity_id)
+        if entity_id is not None else FieldDefinition.scope_entity_id.is_(None))))
+    by_id = {str(item.id): item for item in definitions}
+    values = {}
+    for key, value in submitted.items():
+        definition = by_id.get(str(key))
+        if definition is None:
+            raise HTTPException(422, 'Пользовательское поле не существует или недоступно: ' + str(key))
+        try:
+            values[definition.id] = validate_field(definition, value)
+        except HTTPException as exc:
+            raise HTTPException(exc.status_code, f'{definition.name}: {exc.detail}') from exc
+    if creating:
+        absent = [d.name for d in definitions if d.required and (d.id not in values or values[d.id] is None)]
+        if absent:
+            raise HTTPException(422, 'Заполните обязательные поля: ' + ', '.join(absent))
+    return values
+
+
+def store_custom_fields(db: DBSession, user: User, entity_type: str, entity_id: int, values: dict[int, Any]):
+    for field_id, value in values.items():
+        rec = db.scalar(select(FieldValue).where(FieldValue.entity_type == entity_type,
+            FieldValue.entity_id == entity_id, FieldValue.field_id == field_id))
+        old = rec.value if rec else None
+        normalized_text = str(value).casefold() if value is not None else ''
+        if rec is None:
+            db.add(FieldValue(entity_type=entity_type, entity_id=entity_id,
+                field_id=field_id, value=value, value_text=normalized_text, updated_by=user.id))
+        else:
+            rec.value = value
+            rec.value_text = normalized_text
+            rec.updated_by = user.id
+        db.add(FieldValueRevision(entity_type=entity_type, entity_id=entity_id,
+            field_id=field_id, value=value, updated_by=user.id))
+        if old != value:
+            new_revision(db, user, entity_type, entity_id, f'custom:{field_id}', value)
+    if values:
+        audit(db, user, 'set_custom_fields', entity_type, entity_id,
+              {'field_ids': sorted(values), 'count': len(values)})
+
 def asset_filters(q="", oi_id=None, status="", network_segment="", os_name="", field_id=None, field_value=""):
     conditions = []
     if q:
@@ -343,7 +404,7 @@ def asset_filters(q="", oi_id=None, status="", network_segment="", os_name="", f
 
 def assets_query(q="", oi_id=None, status="", network_segment="", os_name="", field_id=None, field_value=""):
     stmt = select(Asset, InformationObject.code.label("oi_code")).join(
-        InformationObject, InformationObject.id == Asset.oi_id)
+        InformationObject, InformationObject.id == Asset.oi_id, isouter=True)
     for c in asset_filters(q, oi_id, status, network_segment, os_name, field_id, field_value):
         stmt = stmt.where(c)
     if field_id is not None:
@@ -356,7 +417,7 @@ def assets_query(q="", oi_id=None, status="", network_segment="", os_name="", fi
 
 @app.get("/api/health/live")
 def live():
-    return {"status": "ok", "version": "0.4.0"}
+    return {"status": "ok", "version": "0.7.0-rc1"}
 
 
 @app.get("/api/health/ready")
@@ -418,6 +479,84 @@ def list_objects(q: str = "", db: DBSession = Depends(get_db), user: User = Depe
     return [asdict(x) for x in db.scalars(stmt.limit(2000))]
 
 
+# v0.6: every OI import must be previewed and reconfirmed before it can write business data.
+@app.get('/api/objects/{oi_id}/transfer.zip')
+def object_transfer_export(oi_id: int, db: DBSession = Depends(get_db), user: User = Depends(admin_only)):
+    from app.object_transfer import export_oi
+    bundle = export_oi(db, oi_id)
+    audit(db, user, 'oi_transfer_export', 'oi', oi_id, {'size': len(bundle)})
+    commit(db)
+    return Response(bundle, media_type='application/zip', headers={
+        'Content-Disposition': f'attachment; filename="oi-{oi_id}-emergency.zip"',
+        'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff'})
+
+
+@app.post('/api/objects/transfer/preview')
+async def object_transfer_preview(file: UploadFile = File(...),
+                                  mode: Literal['merge', 'copy', 'replace'] = Form(...),
+                                  db: DBSession = Depends(get_db), user: User = Depends(admin_only)):
+    from app.object_transfer import parse_bundle, inventory, digest, diff, CONFIRMATION_TTL, MAX_ARCHIVE
+    raw = await file.read(MAX_ARCHIVE + 1)
+    payload = parse_bundle(raw)
+    nonce = str(uuid.uuid4())
+    comparisons = {candidate: diff(db, payload, candidate, nonce.replace('-', ''))
+                   for candidate in ('merge', 'copy', 'replace')}
+    changes = comparisons[mode]
+    phrase = 'ПОДТВЕРЖДАЮ ' + secrets.token_hex(4).upper()
+    baseline = digest(inventory(db, payload['object']['code']))
+    record = TransferApproval(id=nonce, actor_id=user.id, object_code=payload['object']['code'],
+                              mode=mode, archive_digest=hashlib.sha256(raw).hexdigest(),
+                              baseline_digest=baseline, confirm_digest=token_digest(phrase),
+                              expires_at=datetime.now(timezone.utc) + CONFIRMATION_TTL)
+    db.add(record)
+    commit(db)
+    return {'plan_id': record.id, 'expires_at': record.expires_at.isoformat(), 'confirmation_phrase': phrase,
+            'preview': changes, 'comparisons': comparisons, 'options': [
+                {'mode': 'merge', 'description': 'Добавить новые записи, конфликты блокируют импорт'},
+                {'mode': 'copy', 'description': 'Создать отдельный ОИ и новые коды СВТ'},
+                {'mode': 'replace', 'description': 'Заменить паспорта; отсутствующие СВТ вывести из эксплуатации, историю сохранить'}]}
+
+
+@app.post('/api/objects/transfer/commit')
+async def object_transfer_commit(plan_id: str = Form(...), mode: Literal['merge', 'copy', 'replace'] = Form(...),
+                                 confirmation_phrase: str = Form(...), file: UploadFile = File(...),
+                                 db: DBSession = Depends(get_db), user: User = Depends(admin_only)):
+    from app.object_transfer import parse_bundle, inventory, digest, diff, apply, MAX_ARCHIVE
+    raw = await file.read(MAX_ARCHIVE + 1)
+    payload = parse_bundle(raw)
+    # Lock the approval row. A replay or parallel confirmation cannot spend it twice on PostgreSQL.
+    record = db.scalar(select(TransferApproval).where(TransferApproval.id == plan_id).with_for_update())
+    if not record or record.actor_id != user.id:
+        raise HTTPException(404, 'Подготовленная операция не найдена')
+    expiry = record.expires_at if record.expires_at.tzinfo else record.expires_at.replace(tzinfo=timezone.utc)
+    if record.used_at is not None or expiry <= datetime.now(timezone.utc):
+        raise HTTPException(409, 'Подтверждение уже использовано или просрочено. Создайте новый предпросмотр.')
+    if record.mode != mode or record.object_code != payload['object']['code'] or not hmac.compare_digest(record.archive_digest, hashlib.sha256(raw).hexdigest()):
+        raise HTTPException(409, 'Режим или содержимое архива изменились. Создайте новый предпросмотр.')
+    if not hmac.compare_digest(record.confirm_digest, token_digest(confirmation_phrase)):
+        raise HTTPException(403, 'Не получено повторное подтверждение операции')
+    # Lock current OI/asset rows while comparing with the preview and applying changes.
+    locked = db.scalar(select(InformationObject).where(
+        InformationObject.code == record.object_code).with_for_update())
+    if locked is not None:
+        list(db.scalars(select(Asset).where(Asset.oi_id == locked.id).with_for_update()))
+    if record.baseline_digest != digest(inventory(db, record.object_code)):
+        raise HTTPException(409, 'С момента предпросмотра данные ОИ изменились. Проверьте изменения заново.')
+    changes = diff(db, payload, mode, record.id.replace('-', ''))
+    if not changes['can_apply']:
+        raise HTTPException(409, {'message': 'Обнаружены конфликты. Импорт не выполнен.', 'conflicts': changes['conflicts']})
+    obj = apply(db, payload, mode, record.id.replace('-', ''), user.id)
+    db.flush()
+    record.used_at = datetime.now(timezone.utc)
+    audit(db, user, 'oi_transfer_commit', 'oi', obj.id, {
+        'mode': mode, 'plan_id': record.id, 'archive_sha256': record.archive_digest,
+        'object_code': obj.code, 'added_assets': changes['add_assets'],
+        'changed_assets': changes['change_assets'], 'retired_assets': changes['retire_missing_assets']})
+    commit(db)
+    return {'ok': True, 'object_id': obj.id, 'object_code': obj.code, 'mode': mode,
+            'message': 'Импорт завершён. История ремонтов и документы не импортировались.'}
+
+
 @app.get("/api/objects/{id}")
 def get_object(id: int, db: DBSession = Depends(get_db), user: User = Depends(current_user)):
     return asdict(entity(db, "oi", id))
@@ -429,13 +568,15 @@ def create_object(data: OIInput, db: DBSession = Depends(get_db), user: User = D
         raise HTTPException(422, 'Контрольная дата не может предшествовать дате аттестации')
     if data.attestation_document_id:
         check_document(db, data.attestation_document_id)
-    record = InformationObject(**data.model_dump())
+    custom = normalize_custom_fields(db, "oi", data.custom_fields, creating=True)
+    record = InformationObject(**data.model_dump(exclude={"custom_fields"}))
     db.add(record)
     try:
         db.flush()
     except IntegrityError:
         db.rollback()
         raise HTTPException(409, "Код ОИ уже существует")
+    store_custom_fields(db, user, "oi", record.id, custom)
     audit(db, user, "create", "oi", record.id, {"values": data.model_dump(mode="json")})
     commit(db)
     return asdict(record)
@@ -445,6 +586,8 @@ def create_object(data: OIInput, db: DBSession = Depends(get_db), user: User = D
 def update_object(id: int, data: OIPatch, db: DBSession = Depends(get_db), user: User = Depends(editor_or_admin)):
     record = entity(db, "oi", id)
     changes = data.model_dump(exclude_unset=True)
+    raw_custom = changes.pop("custom_fields", {})
+    custom = normalize_custom_fields(db, "oi", raw_custom, entity_id=id)
     if changes.get('attestation_document_id'):
         check_document(db, changes['attestation_document_id'])
     issued = changes.get('attestation_issued_on', record.attestation_issued_on)
@@ -456,6 +599,7 @@ def update_object(id: int, data: OIPatch, db: DBSession = Depends(get_db), user:
         setattr(record, k, v)
         if before[k] != v:
             new_revision(db, user, "oi", id, k, v)
+    store_custom_fields(db, user, "oi", id, custom)
     audit(db, user, "update", "oi", id, {"before": {k:(v.isoformat() if isinstance(v,date) else v) for k,v in before.items()}, "after": {k:(v.isoformat() if isinstance(v,date) else v) for k,v in changes.items()}})
     commit(db)
     return asdict(record)
@@ -517,14 +661,17 @@ def get_asset(id: int, db: DBSession = Depends(get_db), user: User = Depends(cur
 
 @app.post("/api/assets", status_code=201)
 def create_asset(data: AssetInput, db: DBSession = Depends(get_db), user: User = Depends(editor_or_admin)):
-    require_oi(db, data.oi_id)
-    record = Asset(**data.model_dump())
+    if data.oi_id is not None:
+        require_oi(db, data.oi_id)
+    custom = normalize_custom_fields(db, "asset", data.custom_fields, creating=True)
+    record = Asset(**data.model_dump(exclude={"custom_fields"}))
     db.add(record)
     try:
         db.flush()
     except IntegrityError:
         db.rollback()
         raise HTTPException(409, "Код СВТ уже существует")
+    store_custom_fields(db, user, "asset", record.id, custom)
     audit(db, user, "create", "asset", record.id, {"values": data.model_dump(mode="json")})
     commit(db)
     return asdict(record)
@@ -534,20 +681,24 @@ def create_asset(data: AssetInput, db: DBSession = Depends(get_db), user: User =
 def update_asset(id: int, data: AssetPatch, db: DBSession = Depends(get_db), user: User = Depends(editor_or_admin)):
     record = entity(db, "asset", id)
     changes = data.model_dump(exclude_unset=True)
+    raw_custom = changes.pop("custom_fields", {})
+    custom = normalize_custom_fields(db, "asset", raw_custom, entity_id=id)
     if "oi_id" in changes:
-        require_oi(db, changes["oi_id"])
+        if changes["oi_id"] is not None:
+            require_oi(db, changes["oi_id"])
     before = {k: getattr(record, k) for k in changes}
     for k, v in changes.items():
         setattr(record, k, v)
         if before[k] != v:
             new_revision(db, user, "asset", id, k, v)
+    store_custom_fields(db, user, "asset", id, custom)
     audit(db, user, "update", "asset", id, {"before": before, "after": changes})
     commit(db)
     return asdict(record)
 
 
 @app.get("/api/fields")
-def list_fields(entity_type: Literal["oi", "asset"], entity_id: int | None = None, all_scopes: bool = False,
+def list_fields(entity_type: Literal["oi", "asset", "request"], entity_id: int | None = None, all_scopes: bool = False,
                 db: DBSession = Depends(get_db), user: User = Depends(current_user)):
     stmt = select(FieldDefinition).where(FieldDefinition.entity_type == entity_type)
     if not all_scopes:
@@ -593,7 +744,7 @@ def update_field(id: int, data: FieldPatch, db: DBSession = Depends(get_db), use
 
 
 @app.get("/api/values/{entity_type}/{entity_id}")
-def list_values(entity_type: Literal["oi", "asset"], entity_id: int,
+def list_values(entity_type: Literal["oi", "asset", "request"], entity_id: int,
                 db: DBSession = Depends(get_db), user: User = Depends(current_user)):
     entity(db, entity_type, entity_id)
     result = db.execute(select(FieldValue, FieldDefinition).join(FieldDefinition, FieldDefinition.id == FieldValue.field_id).where(
@@ -603,7 +754,7 @@ def list_values(entity_type: Literal["oi", "asset"], entity_id: int,
 
 
 @app.put("/api/values/{entity_type}/{entity_id}/{field_id}")
-def put_value(entity_type: Literal["oi", "asset"], entity_id: int, field_id: int, data: ValueInput,
+def put_value(entity_type: Literal["oi", "asset", "request"], entity_id: int, field_id: int, data: ValueInput,
               db: DBSession = Depends(get_db), user: User = Depends(editor_or_admin)):
     entity(db, entity_type, entity_id)
     definition = db.get(FieldDefinition, field_id)
@@ -628,7 +779,7 @@ def put_value(entity_type: Literal["oi", "asset"], entity_id: int, field_id: int
 
 
 @app.get("/api/values/{entity_type}/{entity_id}/{field_id}/history")
-def value_history(entity_type: Literal["oi", "asset"], entity_id: int, field_id: int,
+def value_history(entity_type: Literal["oi", "asset", "request"], entity_id: int, field_id: int,
                   db: DBSession = Depends(get_db), user: User = Depends(current_user)):
     entity(db, entity_type, entity_id)
     return [asdict(v) for v in db.scalars(select(FieldValueRevision).where(
@@ -809,6 +960,208 @@ class ChangeUpdate(BaseModel):
     document_id: int | None = Field(default=None, ge=1)
     openproject_work_package_id: int | None = Field(default=None, ge=1)
 
+
+
+# Physical MNI and encrypted ZMNI are independent from the asset lifecycle entries.
+class MNIInput(BaseModel):
+    serial_number: str = Field(min_length=1, max_length=150)
+    accounting_number: str = Field(min_length=1, max_length=150)
+    media_type: str = Field(default='', max_length=60)
+
+class ZMNIInput(BaseModel):
+    serial_number: str = Field(min_length=1, max_length=150)
+    accounting_number: str = Field(min_length=1, max_length=150)
+    software_version: str = Field(default='', max_length=120)
+    container_filename: str = Field(default='', max_length=255)
+    container_issued_on: date | None = None
+
+class ZMNIContainerUpdate(BaseModel):
+    container_filename: str = Field(min_length=1, max_length=255)
+    container_issued_on: date
+
+@app.get('/api/assets/{asset_id}/mni')
+def get_asset_mni(asset_id: int, db: DBSession=Depends(get_db), user: User=Depends(current_user)):
+    require_asset(db,asset_id)
+    return [asdict(x) for x in db.scalars(select(AssetMNI).where(AssetMNI.asset_id==asset_id).order_by(AssetMNI.id))]
+
+@app.post('/api/assets/{asset_id}/mni',status_code=201)
+def add_asset_mni(asset_id: int,data: MNIInput,db:DBSession=Depends(get_db),user:User=Depends(editor_or_admin)):
+    require_asset(db,asset_id)
+    obj=AssetMNI(asset_id=asset_id,**data.model_dump())
+    db.add(obj)
+    try: db.flush()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409,'МНИ с таким заводским номером уже учтён на СВТ')
+    audit(db,user,'asset_mni_created','mni',obj.id,{'asset_id':asset_id,'serial_number':obj.serial_number,'accounting_number':obj.accounting_number})
+    commit(db)
+    return asdict(obj)
+
+@app.get('/api/assets/{asset_id}/zmni')
+def get_asset_zmni(asset_id: int,db:DBSession=Depends(get_db),user:User=Depends(current_user)):
+    require_asset(db,asset_id)
+    return [asdict(x) for x in db.scalars(select(AssetZMNI).where(AssetZMNI.asset_id==asset_id).order_by(AssetZMNI.id))]
+
+@app.post('/api/assets/{asset_id}/zmni',status_code=201)
+def add_asset_zmni(asset_id: int,data: ZMNIInput,db:DBSession=Depends(get_db),user:User=Depends(editor_or_admin)):
+    require_asset(db,asset_id)
+    obj=AssetZMNI(asset_id=asset_id,**data.model_dump())
+    db.add(obj)
+    try: db.flush()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409,'ЗМНИ с таким заводским номером уже учтён на СВТ')
+    if obj.container_filename and obj.container_issued_on:
+        db.add(ZMNIContainerHistory(zmni_id=obj.id,container_filename=obj.container_filename,
+            container_issued_on=obj.container_issued_on,recorded_by=user.id))
+    audit(db,user,'asset_zmni_created','zmni',obj.id,{'asset_id':asset_id,'serial_number':obj.serial_number,'accounting_number':obj.accounting_number})
+    commit(db)
+    return asdict(obj)
+
+@app.post('/api/assets/{asset_id}/zmni/{zmni_id}/container')
+def renew_zmni_container(asset_id:int,zmni_id:int,data:ZMNIContainerUpdate,
+                         db:DBSession=Depends(get_db),user:User=Depends(editor_or_admin)):
+    require_asset(db,asset_id)
+    obj=db.get(AssetZMNI,zmni_id)
+    if obj is None or obj.asset_id!=asset_id:
+        raise HTTPException(404,'ЗМНИ не найден на этой СВТ')
+    if obj.container_issued_on and data.container_issued_on < obj.container_issued_on:
+        raise HTTPException(422,'Дата нового контейнера не должна быть раньше действующего')
+    previous={'container_filename':obj.container_filename,'container_issued_on':str(obj.container_issued_on)}
+    obj.container_filename=data.container_filename
+    obj.container_issued_on=data.container_issued_on
+    db.add(ZMNIContainerHistory(zmni_id=obj.id,container_filename=data.container_filename,
+                                container_issued_on=data.container_issued_on,recorded_by=user.id))
+    audit(db,user,'zmni_container_reissued','zmni',obj.id,{'before':previous,'after':data.model_dump(mode='json')})
+    commit(db)
+    return asdict(obj)
+
+class MediaIdentityPatch(BaseModel):
+    serial_number: str = Field(min_length=1, max_length=150)
+    accounting_number: str = Field(min_length=1, max_length=150)
+    media_type: str = Field(default='', max_length=60)
+
+class ZMNIIdentityPatch(BaseModel):
+    serial_number: str = Field(min_length=1, max_length=150)
+    accounting_number: str = Field(min_length=1, max_length=150)
+    software_version: str = Field(default='', max_length=120)
+
+@app.patch('/api/assets/{asset_id}/mni/{mni_id}')
+def update_asset_mni(asset_id:int,mni_id:int,data:MediaIdentityPatch,
+                     db:DBSession=Depends(get_db),user:User=Depends(editor_or_admin)):
+    require_asset(db,asset_id)
+    item=db.get(AssetMNI,mni_id)
+    if not item or item.asset_id!=asset_id:raise HTTPException(404,'МНИ не найден на этой СВТ')
+    before={key:getattr(item,key) for key in data.model_fields}
+    for key,value in data.model_dump().items():setattr(item,key,value)
+    audit(db,user,'asset_mni_corrected','mni',item.id,{'before':before,'after':data.model_dump()})
+    commit(db)
+    return asdict(item)
+
+@app.patch('/api/assets/{asset_id}/zmni/{zmni_id}')
+def update_asset_zmni(asset_id:int,zmni_id:int,data:ZMNIIdentityPatch,
+                      db:DBSession=Depends(get_db),user:User=Depends(editor_or_admin)):
+    require_asset(db,asset_id)
+    item=db.get(AssetZMNI,zmni_id)
+    if not item or item.asset_id!=asset_id:raise HTTPException(404,'ЗМНИ не найден на этой СВТ')
+    before={key:getattr(item,key) for key in data.model_fields}
+    for key,value in data.model_dump().items():setattr(item,key,value)
+    audit(db,user,'asset_zmni_corrected','zmni',item.id,{'before':before,'after':data.model_dump()})
+    commit(db)
+    return asdict(item)
+
+@app.get('/api/assets/{asset_id}/zmni/{zmni_id}/history')
+def get_zmni_history(asset_id:int,zmni_id:int,db:DBSession=Depends(get_db),user:User=Depends(current_user)):
+    require_asset(db,asset_id)
+    obj=db.get(AssetZMNI,zmni_id)
+    if obj is None or obj.asset_id!=asset_id: raise HTTPException(404,'ЗМНИ не найден на этой СВТ')
+    return [asdict(x) for x in db.scalars(select(ZMNIContainerHistory).where(
+        ZMNIContainerHistory.zmni_id==zmni_id).order_by(ZMNIContainerHistory.id))]
+
+# OI review findings are deliberately separate from quarterly per-SVT inspections.
+class OIReviewInput(BaseModel):
+    reviewed_on: date
+    reviewer: str = Field(min_length=2, max_length=180)
+    report_smb_path: str = Field(default='', max_length=2048)
+    notes: str = Field(default='', max_length=10000)
+
+    @field_validator('report_smb_path')
+    @classmethod
+    def valid_report_path(cls, value):
+        if value and not (value.startswith('\\\\') or value.lower().startswith('smb://')):
+            raise ValueError('Укажите путь \\\\server\\share\\report.pdf или smb://server/share/report.pdf')
+        return value
+
+class OIFindingInput(BaseModel):
+    category: Literal['deficiency', 'violation']
+    description: str = Field(min_length=2, max_length=10000)
+    corrective_action: str = Field(default='', max_length=10000)
+
+class OIFindingResolution(BaseModel):
+    resolved: bool
+    corrective_action: str = Field(default='', max_length=10000)
+
+
+@app.get('/api/objects/{oi_id}/reviews')
+def list_oi_reviews(oi_id: int, db: DBSession = Depends(get_db), user: User = Depends(current_user)):
+    entity(db, 'oi', oi_id)
+    reviews = list(db.scalars(select(OIReview).where(OIReview.oi_id == oi_id).order_by(OIReview.reviewed_on.desc(), OIReview.id.desc())))
+    ids = [r.id for r in reviews]
+    findings = {i: [] for i in ids}
+    if ids:
+        for item in db.scalars(select(OIReviewFinding).where(OIReviewFinding.review_id.in_(ids)).order_by(OIReviewFinding.id)):
+            findings[item.review_id].append(asdict(item))
+    return [{**asdict(r), 'findings': findings[r.id],
+             'open_count': sum(not f['resolved'] for f in findings[r.id])} for r in reviews]
+
+
+@app.post('/api/objects/{oi_id}/reviews', status_code=201)
+def create_oi_review(oi_id: int, data: OIReviewInput, db: DBSession = Depends(get_db), user: User = Depends(editor_or_admin)):
+    entity(db, 'oi', oi_id)
+    review = OIReview(oi_id=oi_id, **data.model_dump(), created_by=user.id)
+    db.add(review); db.flush()
+    audit(db, user, 'oi_review_created', 'oi_review', review.id,
+          {'oi_id': oi_id, 'reviewed_on': data.reviewed_on.isoformat(), 'report_smb_path': data.report_smb_path})
+    commit(db)
+    return asdict(review)
+
+
+def review_for_object(db: DBSession, oi_id: int, review_id: int):
+    entity(db, 'oi', oi_id)
+    review = db.get(OIReview, review_id)
+    if review is None or review.oi_id != oi_id:
+        raise HTTPException(404, 'Проверка этого ОИ не найдена')
+    return review
+
+
+@app.post('/api/objects/{oi_id}/reviews/{review_id}/findings', status_code=201)
+def create_oi_finding(oi_id: int, review_id: int, data: OIFindingInput,
+                      db: DBSession = Depends(get_db), user: User = Depends(editor_or_admin)):
+    review_for_object(db, oi_id, review_id)
+    finding = OIReviewFinding(review_id=review_id, **data.model_dump(), created_by=user.id)
+    db.add(finding); db.flush()
+    audit(db, user, 'oi_finding_created', 'oi_finding', finding.id, {'oi_id': oi_id, 'review_id': review_id, **data.model_dump()})
+    commit(db)
+    return asdict(finding)
+
+
+@app.patch('/api/objects/{oi_id}/reviews/{review_id}/findings/{finding_id}')
+def resolve_oi_finding(oi_id: int, review_id: int, finding_id: int, data: OIFindingResolution,
+                       db: DBSession = Depends(get_db), user: User = Depends(editor_or_admin)):
+    review_for_object(db, oi_id, review_id)
+    finding = db.get(OIReviewFinding, finding_id)
+    if finding is None or finding.review_id != review_id:
+        raise HTTPException(404, 'Замечание не относится к указанной проверке')
+    previous = {'resolved': finding.resolved, 'corrective_action': finding.corrective_action}
+    finding.resolved = data.resolved
+    finding.corrective_action = data.corrective_action
+    finding.resolved_by = user.id if data.resolved else None
+    finding.resolved_at = now() if data.resolved else None
+    audit(db, user, 'oi_finding_resolution', 'oi_finding', finding.id,
+          {'oi_id': oi_id, 'review_id': review_id, 'before': previous,
+           'after': {'resolved': data.resolved, 'corrective_action': data.corrective_action}})
+    commit(db)
+    return asdict(finding)
 
 def check_document(db: DBSession, document_id: int | None):
     if document_id is not None and db.get(Document, document_id) is None:
@@ -1690,7 +2043,7 @@ def weekly_report(week_start:date|None=None,user_id:int|None=None,format:Literal
 
 # ---- v0.4 automated local controls and explicitly opt-in OpenProject outbox ----
 from app.automation import plan as plan_controls
-from app.openproject_client import configuration as op_configuration, enabled as op_sync_enabled, publish as op_publish
+from app.openproject_client import configuration as op_configuration, enabled as op_sync_enabled, publish as op_publish, fetch_work_package as op_fetch_work_package
 
 @app.get('/api/automation/preview')
 def automation_preview(db:DBSession=Depends(get_db),user:User=Depends(current_user)):
@@ -1705,13 +2058,15 @@ def automation_plan(db:DBSession=Depends(get_db),user:User=Depends(editor_or_adm
 
 @app.get('/api/automation/activities')
 def automation_activities(status:str|None=None,event_type:str|None=None,oi_id:int|None=None,
-                          limit:int=Query(200,ge=1,le=1000),db:DBSession=Depends(get_db),
-                          user:User=Depends(current_user)):
+                          limit:int=Query(200,ge=1,le=1000),offset:int=Query(0,ge=0),
+                          db:DBSession=Depends(get_db),user:User=Depends(current_user)):
     query=select(PlannedActivity)
-    if status:query=query.where(PlannedActivity.status==status)
+    if status == 'pending':
+        query=query.where(PlannedActivity.status.in_(['open','acknowledged']))
+    elif status:query=query.where(PlannedActivity.status==status)
     if event_type:query=query.where(PlannedActivity.event_type==event_type)
     if oi_id:query=query.where(PlannedActivity.oi_id==oi_id)
-    return [asdict(x) for x in db.scalars(query.order_by(PlannedActivity.deadline,PlannedActivity.id).limit(limit))]
+    return [asdict(x) for x in db.scalars(query.order_by(PlannedActivity.deadline,PlannedActivity.id).offset(offset).limit(limit))]
 
 class ActivityNote(BaseModel):
     note: str=Field(min_length=10,max_length=1000)
@@ -1757,3 +2112,359 @@ def automation_publish(id:int,db:DBSession=Depends(get_db),user:User=Depends(adm
     audit(db,user,'control_published','planned_activity',item.id,{'openproject_work_package_id':wid})
     commit(db)
     return asdict(item)
+
+
+# ---- v0.5 configurable periodic controls with evidence and safe status lookup ----
+class ControlRuleInput(BaseModel):
+    title: str = Field(min_length=3, max_length=250)
+    scope: Literal['oi', 'asset']
+    oi_id: int | None = Field(default=None, ge=1)
+    first_due: date
+    interval_months: Literal[1, 3, 6, 12]
+    assignee: str = Field(default='', max_length=180)
+
+    @field_validator('title')
+    @classmethod
+    def meaningful_title(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 3:
+            raise ValueError('Нужно осмысленное название регламента')
+        return value
+
+
+class ControlCompletion(BaseModel):
+    evidence_document_id: int = Field(ge=1)
+    note: str = Field(min_length=10, max_length=2000)
+
+    @field_validator('note')
+    @classmethod
+    def meaningful_note(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 10:
+            raise ValueError('Опишите фактическое выполнение не менее чем 10 символами')
+        return value
+
+
+@app.get('/api/automation/rules')
+def list_control_rules(db: DBSession = Depends(get_db), user: User = Depends(current_user)):
+    return [asdict(x) for x in db.scalars(select(ControlRule).order_by(ControlRule.id))]
+
+
+@app.post('/api/automation/rules', status_code=201)
+def create_control_rule(data: ControlRuleInput, db: DBSession = Depends(get_db),
+                        user: User = Depends(admin_only)):
+    if data.oi_id is not None and db.get(InformationObject, data.oi_id) is None:
+        raise HTTPException(404, 'ОИ не найден')
+    rule = ControlRule(**data.model_dump(), created_by=user.id)
+    db.add(rule)
+    db.flush()
+    audit(db, user, 'control_rule_created', 'control_rule', rule.id,
+          {'scope': rule.scope, 'oi_id': rule.oi_id, 'interval_months': rule.interval_months})
+    commit(db)
+    return asdict(rule)
+
+
+@app.post('/api/automation/rules/{id}/disable')
+def disable_control_rule(id: int, db: DBSession = Depends(get_db), user: User = Depends(admin_only)):
+    rule = db.get(ControlRule, id)
+    if rule is None:
+        raise HTTPException(404, 'Правило не найдено')
+    if not rule.active:
+        raise HTTPException(409, 'Правило уже выключено')
+    rule.active = False
+    changed = 0
+    for item in db.scalars(select(PlannedActivity).where(PlannedActivity.rule_id == id,
+                                                        PlannedActivity.status.in_(['open', 'acknowledged']))):
+        item.status = 'superseded'
+        changed += 1
+        if item.sync_status == 'published':
+            item.sync_error = 'Правило выключено; задачу OpenProject необходимо сверить вручную'
+    audit(db, user, 'control_rule_disabled', 'control_rule', id, {'superseded_count': changed})
+    commit(db)
+    return {'id': id, 'active': False, 'superseded_count': changed}
+
+
+@app.post('/api/automation/rules/{id}/enable')
+def enable_control_rule(id: int, db: DBSession = Depends(get_db), user: User = Depends(admin_only)):
+    rule = db.get(ControlRule, id)
+    if rule is None:
+        raise HTTPException(404, 'Правило не найдено')
+    if rule.active:
+        raise HTTPException(409, 'Правило уже активно')
+    rule.active = True
+    # Previous superseded records stay in history; users can start new periods.
+    audit(db, user, 'control_rule_enabled', 'control_rule', id)
+    commit(db)
+    return asdict(rule)
+
+
+@app.get('/api/automation/summary')
+def control_summary(db: DBSession = Depends(get_db), user: User = Depends(current_user)):
+    today = datetime.now(LOCAL_TIMEZONE).date()
+    records = list(db.scalars(select(PlannedActivity)))
+    pending = [x for x in records if x.status in ('open', 'acknowledged')]
+    by_oi = {}
+    for item in pending:
+        slot = by_oi.setdefault(item.oi_id, {'oi_id': item.oi_id, 'pending': 0, 'overdue': 0, 'due_30_days': 0})
+        slot['pending'] += 1
+        if item.deadline < today:
+            slot['overdue'] += 1
+        if today <= item.deadline <= today + timedelta(days=30):
+            slot['due_30_days'] += 1
+    return {'as_of': today.isoformat(), 'total': len(records), 'pending': len(pending),
+            'overdue': sum(x.deadline < today for x in pending),
+            'due_30_days': sum(today <= x.deadline <= today + timedelta(days=30) for x in pending),
+            'completed': sum(x.status == 'completed' for x in records),
+            'by_oi': sorted(by_oi.values(), key=lambda x: (-x['overdue'], -x['pending'], x['oi_id']))}
+
+
+@app.post('/api/automation/activities/{id}/complete')
+def complete_control(id: int, data: ControlCompletion, db: DBSession = Depends(get_db),
+                     user: User = Depends(editor_or_admin)):
+    item = db.get(PlannedActivity, id)
+    if item is None:
+        raise HTTPException(404, 'Мероприятие не найдено')
+    if item.status not in ('open', 'acknowledged'):
+        raise HTTPException(409, 'Мероприятие уже закрыто или отменено')
+    if db.get(Document, data.evidence_document_id) is None:
+        raise HTTPException(404, 'Подтверждающий документ не найден')
+    item.status = 'completed'
+    item.evidence_document_id = data.evidence_document_id
+    item.completion_note = data.note
+    item.completed_by = user.id
+    item.completed_at = now()
+    audit(db, user, 'control_completed', 'planned_activity', item.id,
+          {'evidence_document_id': data.evidence_document_id, 'note': data.note})
+    commit(db)
+    return asdict(item)
+
+
+@app.post('/api/automation/activities/{id}/reconcile')
+def reconcile_control(id: int, db: DBSession = Depends(get_db), user: User = Depends(admin_only)):
+    item = db.get(PlannedActivity, id)
+    if item is None:
+        raise HTTPException(404, 'Мероприятие не найдено')
+    if item.sync_status != 'published' or not item.openproject_work_package_id:
+        raise HTTPException(409, 'Нет опубликованной задачи для сверки')
+    try:
+        remote = op_fetch_work_package(item.openproject_work_package_id)
+    except Exception as err:
+        # Never reveal tokens, URLs or HTTP bodies from external service.
+        audit(db, user, 'control_remote_check_failed', 'planned_activity', id,
+              {'error_type': type(err).__name__})
+        commit(db)
+        raise HTTPException(502, 'Не удалось получить статус из OpenProject; проверьте настройки и доступ') from None
+    item.remote_status = remote['status']
+    item.remote_checked_at = now()
+    audit(db, user, 'control_remote_checked', 'planned_activity', id,
+          {'remote_status': remote['status'], 'work_package_id': item.openproject_work_package_id})
+    commit(db)
+    return {'activity': asdict(item), 'remote': remote,
+            'note': 'OpenProject не закрывает мероприятие автоматически; приложите доказательство в OI Registry'}
+
+# v0.6.1 administrative requests: separate from historical OI proposals and SVT repair requests.
+import ipaddress
+
+
+class SystemTypeInput(BaseModel):
+    name: str = Field(min_length=2, max_length=180)
+
+
+class SystemTypePatch(BaseModel):
+    name: str | None = Field(default=None, min_length=2, max_length=180)
+    active: bool | None = None
+
+
+class RegistryRequestInput(BaseModel):
+    segment: str = Field(default='', max_length=150)
+    full_name: str = Field(min_length=2, max_length=180)
+    ip_address: str = Field(default='', max_length=60)
+    scan_smb_path: str = Field(default='', max_length=2048)
+    asset_id: int | None = Field(default=None, ge=1)
+    custom_fields: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator('ip_address')
+    @classmethod
+    def check_ip(cls, value):
+        if value:
+            ipaddress.ip_address(value)
+        return value
+
+    @field_validator('scan_smb_path')
+    @classmethod
+    def check_smb_path(cls, value):
+        if value and not (value.startswith('\\\\') or value.lower().startswith('smb://')):
+            raise ValueError('Укажите UNC \\\\server\\share\\file.pdf или smb://server/share/file.pdf')
+        return value
+
+
+@app.get('/api/system-types')
+def get_system_types(db: DBSession = Depends(get_db), user: User = Depends(current_user)):
+    return [asdict(x) for x in db.scalars(select(SystemType).order_by(SystemType.name))]
+
+
+@app.post('/api/system-types', status_code=201)
+def add_system_type(data: SystemTypeInput, db: DBSession = Depends(get_db), user: User = Depends(admin_only)):
+    record = SystemType(name=data.name.strip())
+    db.add(record)
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, 'Такой тип системы уже существует')
+    audit(db, user, 'system_type_created', 'system_type', record.id, {'name': record.name})
+    commit(db)
+    return asdict(record)
+
+
+@app.patch('/api/system-types/{type_id}')
+def edit_system_type(type_id: int, data: SystemTypePatch,
+                     db: DBSession = Depends(get_db), user: User = Depends(admin_only)):
+    record = db.get(SystemType, type_id)
+    if record is None:
+        raise HTTPException(404, 'Тип системы не найден')
+    patch = data.model_dump(exclude_unset=True)
+    before = {key: getattr(record, key) for key in patch}
+    for key, value in patch.items():
+        setattr(record, key, value.strip() if key == 'name' else value)
+    audit(db, user, 'system_type_changed', 'system_type', type_id, {'before': before, 'after': patch})
+    try:
+        commit(db)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, 'Такой тип системы уже существует')
+    return asdict(record)
+
+
+@app.get('/api/registry-requests')
+def get_registry_requests(db: DBSession = Depends(get_db), user: User = Depends(editor_or_admin)):
+    stmt = (select(RegistryRequest, Asset.code)
+            .outerjoin(Asset, RegistryRequest.asset_id == Asset.id)
+            .order_by(RegistryRequest.id.desc()).limit(5000))
+    # Historical system_type_id is retained in the DB, but not shown or required.
+    rows = list(db.execute(stmt))
+    ids = [req.id for req, _ in rows]
+    custom = {item_id: {} for item_id in ids}
+    if ids:
+        for value in db.scalars(select(FieldValue).where(
+                FieldValue.entity_type == 'request', FieldValue.entity_id.in_(ids))):
+            custom[value.entity_id][str(value.field_id)] = value.value
+    return [{**asdict(req), 'asset_code': asset_code or '', 'custom_fields': custom[req.id]}
+            for req, asset_code in rows]
+
+
+@app.post('/api/registry-requests', status_code=201)
+def add_registry_request(data: RegistryRequestInput, db: DBSession = Depends(get_db),
+                         user: User = Depends(editor_or_admin)):
+    if data.asset_id is not None:
+        require_asset(db, data.asset_id)
+    custom = normalize_custom_fields(db, 'request', data.custom_fields, creating=True)
+    record = RegistryRequest(**data.model_dump(exclude={'custom_fields'}), created_by=user.id)
+    db.add(record)
+    db.flush()
+    store_custom_fields(db, user, 'request', record.id, custom)
+    audit(db, user, 'registry_request_created', 'registry_request', record.id, data.model_dump())
+    commit(db)
+    return asdict(record)
+
+
+@app.patch('/api/registry-requests/{request_id}')
+def edit_registry_request(request_id: int, data: RegistryRequestInput,
+                          db: DBSession = Depends(get_db), user: User = Depends(editor_or_admin)):
+    record = db.get(RegistryRequest, request_id)
+    if record is None:
+        raise HTTPException(404, 'Заявка не найдена')
+    if data.asset_id is not None:
+        require_asset(db, data.asset_id)
+    changes = data.model_dump(exclude={'custom_fields'})
+    custom = normalize_custom_fields(db, 'request', data.custom_fields, entity_id=request_id)
+    before = {key: getattr(record, key) for key in changes}
+    for key, value in changes.items():
+        setattr(record, key, value)
+    store_custom_fields(db, user, 'request', request_id, custom)
+    audit(db, user, 'registry_request_updated', 'registry_request', request_id, {'before': before, 'after': changes})
+    commit(db)
+    return asdict(record)
+
+
+@app.post('/api/assets/import/preview')
+async def asset_import_preview(file: UploadFile = File(...), mode: Literal['merge', 'copy', 'replace'] = Form(...),
+                               db: DBSession = Depends(get_db), user: User = Depends(admin_only)):
+    from app.asset_csv import MAX_BYTES, parse, compare, snapshot
+    raw = await file.read(MAX_BYTES + 1)
+    rows = parse(raw)
+    comparisons = {m: compare(db, rows, m) for m in ('merge', 'copy', 'replace')}
+    nonce = str(uuid.uuid4())
+    phrase = 'ПОДТВЕРЖДАЮ СВТ ' + secrets.token_hex(4).upper()
+    baseline = hashlib.sha256(json.dumps(snapshot(db, rows), ensure_ascii=False, sort_keys=True, default=str).encode()).hexdigest()
+    approval = TransferApproval(id=nonce, actor_id=user.id, object_code='__SVT_CSV__', mode=mode,
+                                archive_digest=hashlib.sha256(raw).hexdigest(), baseline_digest=baseline,
+                                confirm_digest=token_digest(phrase), expires_at=now() + timedelta(minutes=10))
+    db.add(approval)
+    commit(db)
+    return {'plan_id': nonce, 'confirmation_phrase': phrase, 'selected': comparisons[mode],
+            'comparisons': comparisons, 'expires_at': approval.expires_at.isoformat()}
+
+
+@app.post('/api/assets/import/commit')
+async def asset_import_commit(plan_id: str = Form(...), mode: Literal['merge', 'copy', 'replace'] = Form(...),
+                              confirmation_phrase: str = Form(...), file: UploadFile = File(...),
+                              db: DBSession = Depends(get_db), user: User = Depends(admin_only)):
+    from app.asset_csv import MAX_BYTES, parse, compare, snapshot, apply
+    raw = await file.read(MAX_BYTES + 1)
+    rows = parse(raw)
+    approval = db.scalar(select(TransferApproval).where(TransferApproval.id == plan_id).with_for_update())
+    if not approval or approval.actor_id != user.id or approval.object_code != '__SVT_CSV__':
+        raise HTTPException(404, 'Предпросмотр не найден')
+    expiry = approval.expires_at if approval.expires_at.tzinfo else approval.expires_at.replace(tzinfo=timezone.utc)
+    if approval.used_at is not None or expiry <= now():
+        raise HTTPException(409, 'Подтверждение истекло или уже использовано')
+    if approval.mode != mode or not hmac.compare_digest(approval.archive_digest, hashlib.sha256(raw).hexdigest()):
+        raise HTTPException(409, 'Файл или режим изменились')
+    if not hmac.compare_digest(approval.confirm_digest, token_digest(confirmation_phrase)):
+        raise HTTPException(403, 'Нужно повторное подтверждение')
+    # Lock matching rows before computing the state and executing. Unique codes guard concurrent inserts.
+    list(db.scalars(select(Asset).where(Asset.code.in_(r['code'] for r in rows)).with_for_update()))
+    baseline = hashlib.sha256(json.dumps(snapshot(db, rows), ensure_ascii=False, sort_keys=True, default=str).encode()).hexdigest()
+    if not hmac.compare_digest(baseline, approval.baseline_digest):
+        raise HTTPException(409, 'Реестр изменился после предпросмотра — повторите проверку')
+    outcome = compare(db, rows, mode, plan_id.replace('-', ''))
+    if not outcome['can_apply']:
+        raise HTTPException(409, {'conflicts': outcome['conflicts']})
+    try:
+        apply(db, rows, mode, plan_id.replace('-', ''))
+        approval.used_at = now()
+        audit(db, user, 'asset_csv_import', 'asset', 0, {'plan_id': plan_id, 'mode': mode,
+              'sha256': approval.archive_digest, 'summary': {k: outcome[k] for k in ('total', 'add', 'update')}})
+        commit(db)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, 'Конкурирующий импорт изменил реестр. Создайте новый предпросмотр.')
+    return {'ok': True, 'mode': mode, **outcome}
+
+# v0.7.0: filter-builder uses server allowlists and does not execute user SQL.
+class AssetQueryFilter(BaseModel):
+    field: str
+    op: Literal['eq','contains','empty','not_empty']
+    value: str = Field(default='', max_length=250)
+
+class AssetQueryRequest(BaseModel):
+    columns: list[str] = Field(min_length=1, max_length=40)
+    filters: list[AssetQueryFilter] = Field(default_factory=list, max_length=8)
+
+@app.post('/api/assets/query/preview')
+def preview_asset_query(data: AssetQueryRequest,db: DBSession=Depends(get_db),user: User=Depends(current_user)):
+    from app.asset_query import rows
+    return rows(db,data.columns,[f.model_dump() for f in data.filters],200)
+
+@app.post('/api/assets/query/export.csv')
+def export_asset_query(data: AssetQueryRequest,db:DBSession=Depends(get_db),user:User=Depends(current_user)):
+    from app.asset_query import rows,to_csv
+    result=rows(db,data.columns,[f.model_dump() for f in data.filters],20000)
+    if result['truncated']:
+        raise HTTPException(413,'В выборке больше 20 000 СВТ. Уточните фильтр.')
+    audit(db,user,'asset_query_csv_export','asset',0,{'columns':data.columns,'filters':len(data.filters),'rows':len(result['rows'])})
+    commit(db)
+    return Response(to_csv(result).encode('utf-8'),media_type='text/csv; charset=utf-8',
+                    headers={'Content-Disposition':'attachment; filename="svt-selected.csv"',
+                             'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'})

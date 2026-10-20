@@ -37,7 +37,8 @@ class InformationObject(Base):
     status: Mapped[str] = mapped_column(String(40), default="formation", nullable=False)
     attestation_issued_on: Mapped[date | None] = mapped_column(Date, nullable=True)
     attestation_valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
-    attestation_document_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    attestation_document_id: Mapped[int | None] = mapped_column(Integer, nullable=True)  # legacy; do not remove existing data
+    attestation_smb_path: Mapped[str] = mapped_column(Text, default="", nullable=False)
     attestation_notice_days: Mapped[int] = mapped_column(Integer, nullable=False, default=90)
     openproject_project_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     notes: Mapped[str] = mapped_column(Text, default="", nullable=False)
@@ -48,7 +49,7 @@ class Asset(Base):
     __tablename__ = "assets"
     id: Mapped[int] = mapped_column(primary_key=True)
     code: Mapped[str] = mapped_column(String(80), unique=True, nullable=False)
-    oi_id: Mapped[int] = mapped_column(ForeignKey("information_objects.id", ondelete="RESTRICT"), nullable=False)
+    oi_id: Mapped[int | None] = mapped_column(ForeignKey("information_objects.id", ondelete="RESTRICT"), nullable=True)
     serial_number: Mapped[str] = mapped_column(String(150), default="", nullable=False)
     inventory_number: Mapped[str] = mapped_column(String(150), default="", nullable=False)
     device_type: Mapped[str] = mapped_column(String(100), default="", nullable=False)
@@ -61,10 +62,52 @@ class Asset(Base):
     domain_name: Mapped[str] = mapped_column(String(250), default="", nullable=False)
     seal_state: Mapped[str] = mapped_column(String(36), default="unknown", nullable=False)
     status: Mapped[str] = mapped_column(String(40), default="operational", nullable=False)
+    savz_name: Mapped[str] = mapped_column(String(200), default='', nullable=False)
+    savz_version: Mapped[str] = mapped_column(String(120), default='', nullable=False)
+    szi_nsd_name: Mapped[str] = mapped_column(String(200), default='', nullable=False)
+    szi_nsd_version: Mapped[str] = mapped_column(String(120), default='', nullable=False)
     notes: Mapped[str] = mapped_column(Text, default="", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now, nullable=False)
     __table_args__ = (Index("ix_assets_oi_id", "oi_id"),Index("ix_assets_serial_number", "serial_number"),Index("ix_assets_inventory_number", "inventory_number"),Index("ix_assets_network_segment", "network_segment"),Index("ix_assets_status", "status"))
+
+class AssetMNI(Base):
+    """A physical internal magnetic/solid-state storage medium belonging to an SVT."""
+    __tablename__ = 'asset_mni'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    asset_id: Mapped[int] = mapped_column(ForeignKey('assets.id', ondelete='RESTRICT'), nullable=False)
+    serial_number: Mapped[str] = mapped_column(String(150), nullable=False)
+    accounting_number: Mapped[str] = mapped_column(String(150), nullable=False)
+    media_type: Mapped[str] = mapped_column(String(60), default='', nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, nullable=False)
+    __table_args__ = (UniqueConstraint('asset_id','serial_number',name='uq_asset_mni_serial'),
+                      Index('ix_asset_mni_accounting','accounting_number'),)
+
+
+class AssetZMNI(Base):
+    """An encrypted removable medium assigned to an SVT; container is NOT an MNI."""
+    __tablename__ = 'asset_zmni'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    asset_id: Mapped[int] = mapped_column(ForeignKey('assets.id', ondelete='RESTRICT'), nullable=False)
+    serial_number: Mapped[str] = mapped_column(String(150), nullable=False)
+    accounting_number: Mapped[str] = mapped_column(String(150), nullable=False)
+    software_version: Mapped[str] = mapped_column(String(120), default='', nullable=False)
+    container_filename: Mapped[str] = mapped_column(String(255), default='', nullable=False)
+    container_issued_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, nullable=False)
+    __table_args__ = (UniqueConstraint('asset_id','serial_number',name='uq_asset_zmni_serial'),
+                      Index('ix_asset_zmni_accounting','accounting_number'),)
+
+
+class ZMNIContainerHistory(Base):
+    __tablename__ = 'zmni_container_history'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    zmni_id: Mapped[int] = mapped_column(ForeignKey('asset_zmni.id',ondelete='RESTRICT'),nullable=False)
+    container_filename: Mapped[str] = mapped_column(String(255),nullable=False)
+    container_issued_on: Mapped[date | None] = mapped_column(Date,nullable=True)
+    recorded_by: Mapped[int] = mapped_column(ForeignKey('users.id'),nullable=False)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),default=now,nullable=False)
+    __table_args__ = (Index('ix_zmni_container_history','zmni_id','recorded_at'),)
 
 class FieldDefinition(Base):
     __tablename__ = "field_definitions"
@@ -266,6 +309,60 @@ class AssetSecurityTool(Base):
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     __table_args__ = (Index("ix_tools_asset_active", "asset_id", "removed_at"),)
 
+class SystemType(Base):
+    """Reusable type of application/system in administrative requests."""
+    __tablename__ = 'system_types'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(180), unique=True, nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, nullable=False)
+
+
+class RegistryRequest(Base):
+    """General administrative application; not a fault/repair service request."""
+    __tablename__ = 'registry_requests'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    segment: Mapped[str] = mapped_column(String(150), default='', nullable=False)
+    full_name: Mapped[str] = mapped_column(String(180), nullable=False)
+    system_type_id: Mapped[int | None] = mapped_column(ForeignKey('system_types.id', ondelete='RESTRICT'), nullable=True)  # legacy metadata, hidden in v0.6.2
+    ip_address: Mapped[str] = mapped_column(String(60), default='', nullable=False)
+    scan_smb_path: Mapped[str] = mapped_column(Text, default='', nullable=False)
+    asset_id: Mapped[int | None] = mapped_column(ForeignKey('assets.id', ondelete='RESTRICT'), nullable=True)
+    created_by: Mapped[int] = mapped_column(ForeignKey('users.id'), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, nullable=False)
+    __table_args__ = (Index('ix_registry_requests_segment', 'segment'),
+                      Index('ix_registry_requests_type', 'system_type_id'),)
+
+
+class OIReview(Base):
+    """A dated inspection of an information object, with a reference to the full report."""
+    __tablename__ = 'oi_reviews'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    oi_id: Mapped[int] = mapped_column(ForeignKey('information_objects.id', ondelete='RESTRICT'), nullable=False)
+    reviewed_on: Mapped[date] = mapped_column(Date, nullable=False)
+    reviewer: Mapped[str] = mapped_column(String(180), nullable=False)
+    report_smb_path: Mapped[str] = mapped_column(Text, default='', nullable=False)
+    notes: Mapped[str] = mapped_column(Text, default='', nullable=False)
+    created_by: Mapped[int] = mapped_column(ForeignKey('users.id'), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, nullable=False)
+    __table_args__ = (Index('ix_oi_reviews_object_date', 'oi_id', 'reviewed_on'),)
+
+
+class OIReviewFinding(Base):
+    """One separately resolved finding from one OI review. Findings are never deleted."""
+    __tablename__ = 'oi_review_findings'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    review_id: Mapped[int] = mapped_column(ForeignKey('oi_reviews.id', ondelete='RESTRICT'), nullable=False)
+    category: Mapped[str] = mapped_column(String(20), nullable=False)  # deficiency / violation
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    corrective_action: Mapped[str] = mapped_column(Text, default='', nullable=False)
+    resolved: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    resolved_by: Mapped[int | None] = mapped_column(ForeignKey('users.id'), nullable=True)
+    created_by: Mapped[int] = mapped_column(ForeignKey('users.id'), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, nullable=False)
+    __table_args__ = (Index('ix_oi_finding_review_status', 'review_id', 'resolved'),)
+
 class ServiceRequest(Base):
     __tablename__ = "service_requests"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -357,5 +454,44 @@ class PlannedActivity(Base):
     last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now, nullable=False)
+    rule_id: Mapped[int | None] = mapped_column(ForeignKey("control_rules.id", ondelete="RESTRICT"), nullable=True)
+    assignee: Mapped[str] = mapped_column(String(180), default="", nullable=False)
+    evidence_document_id: Mapped[int | None] = mapped_column(ForeignKey("documents.id", ondelete="RESTRICT"), nullable=True)
+    completion_note: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    completed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    remote_status: Mapped[str] = mapped_column(String(120), default="", nullable=False)
+    remote_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     __table_args__ = (Index("ix_planned_activity_status_deadline", "status", "deadline"),
                       Index("ix_planned_activity_oi", "oi_id", "event_type"))
+
+
+class ControlRule(Base):
+    """Admin-approved periodic control; no claim of regulatory applicability is implied."""
+    __tablename__ = "control_rules"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str] = mapped_column(String(250), nullable=False)
+    scope: Mapped[str] = mapped_column(String(16), nullable=False)  # oi or asset
+    oi_id: Mapped[int | None] = mapped_column(ForeignKey("information_objects.id", ondelete="RESTRICT"))
+    first_due: Mapped[date] = mapped_column(Date, nullable=False)
+    interval_months: Mapped[int] = mapped_column(Integer, nullable=False)
+    assignee: Mapped[str] = mapped_column(String(180), default="", nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, nullable=False)
+    __table_args__ = (Index("ix_control_rules_active_scope", "active", "scope", "oi_id"),)
+
+class TransferApproval(Base):
+    """Single-use authorization for a previously previewed import; no business data stored."""
+    __tablename__ = 'oi_transfer_approvals'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    actor_id: Mapped[int] = mapped_column(ForeignKey('users.id', ondelete='RESTRICT'), nullable=False)
+    object_code: Mapped[str] = mapped_column(String(80), nullable=False)
+    mode: Mapped[str] = mapped_column(String(12), nullable=False)
+    archive_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    baseline_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    confirm_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, nullable=False)
+    __table_args__ = (Index('ix_oi_transfer_actor_exp', 'actor_id', 'expires_at'),)

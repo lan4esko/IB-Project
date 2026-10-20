@@ -1,0 +1,470 @@
+erDiagram
+    USERS ||--o{ LOGIN_SESSIONS : "user_id"
+    INFORMATION_OBJECTS o|--o{ ASSETS : "oi_id"
+    ASSETS ||--o{ ASSET_MNI : "asset_id"
+    ASSETS ||--o{ ASSET_ZMNI : "asset_id"
+    ASSET_ZMNI ||--o{ ZMNI_CONTAINER_HISTORY : "zmni_id"
+    USERS ||--o{ ZMNI_CONTAINER_HISTORY : "recorded_by"
+    FIELD_DEFINITIONS ||--o{ FIELD_VALUES : "field_id"
+    USERS ||--o{ FIELD_VALUES : "updated_by"
+    USERS ||--o{ DOCUMENTS : "created_by"
+    USERS ||--o{ FIELD_ASSERTION_REVISIONS : "changed_by"
+    FIELD_ASSERTION_REVISIONS ||--o{ FIELD_EVIDENCE : "value_revision_id"
+    USERS ||--o{ FIELD_EVIDENCE : "created_by"
+    DOCUMENTS ||--o{ FIELD_EVIDENCE : "document_id"
+    USERS ||--o{ AUDIT_EVENTS : "actor_id"
+    FIELD_DEFINITIONS ||--o{ FIELD_VALUE_REVISIONS : "field_id"
+    USERS ||--o{ FIELD_VALUE_REVISIONS : "updated_by"
+    INFORMATION_OBJECTS ||--o{ CONFIGURATION_BASELINES : "oi_id"
+    USERS o|--o{ CONFIGURATION_BASELINES : "approved_by"
+    DOCUMENTS o|--o{ CONFIGURATION_BASELINES : "document_id"
+    USERS ||--o{ CONFIGURATION_BASELINES : "created_by"
+    ASSETS o|--o{ CONFIGURATION_CHANGES : "asset_id"
+    INFORMATION_OBJECTS ||--o{ CONFIGURATION_CHANGES : "oi_id"
+    USERS o|--o{ CONFIGURATION_CHANGES : "updated_by"
+    USERS ||--o{ CONFIGURATION_CHANGES : "created_by"
+    DOCUMENTS o|--o{ CONFIGURATION_CHANGES : "document_id"
+    DOCUMENTS o|--o{ ASSET_COMPONENTS : "document_id"
+    ASSETS ||--o{ ASSET_COMPONENTS : "asset_id"
+    USERS ||--o{ ASSET_COMPONENTS : "created_by"
+    USERS ||--o{ SHARED_PERIPHERALS : "created_by"
+    INFORMATION_OBJECTS ||--o{ SHARED_PERIPHERALS : "oi_id"
+    ASSETS ||--o{ ASSET_PERIPHERAL_ACCESS : "asset_id"
+    SHARED_PERIPHERALS ||--o{ ASSET_PERIPHERAL_ACCESS : "peripheral_id"
+    USERS ||--o{ ASSET_PERIPHERAL_ACCESS : "created_by"
+    DOCUMENTS o|--o{ ASSET_SECURITY_TOOLS : "document_id"
+    ASSETS ||--o{ ASSET_SECURITY_TOOLS : "asset_id"
+    USERS ||--o{ ASSET_SECURITY_TOOLS : "created_by"
+    USERS ||--o{ REGISTRY_REQUESTS : "created_by"
+    ASSETS o|--o{ REGISTRY_REQUESTS : "asset_id"
+    SYSTEM_TYPES o|--o{ REGISTRY_REQUESTS : "system_type_id"
+    USERS ||--o{ OI_REVIEWS : "created_by"
+    INFORMATION_OBJECTS ||--o{ OI_REVIEWS : "oi_id"
+    OI_REVIEWS ||--o{ OI_REVIEW_FINDINGS : "review_id"
+    USERS ||--o{ OI_REVIEW_FINDINGS : "created_by"
+    USERS o|--o{ OI_REVIEW_FINDINGS : "resolved_by"
+    ASSETS ||--o{ SERVICE_REQUESTS : "asset_id"
+    USERS ||--o{ SERVICE_REQUESTS : "created_by"
+    DOCUMENTS o|--o{ SERVICE_REQUESTS : "document_id"
+    USERS ||--o{ WORK_ENTRIES : "created_by"
+    SERVICE_REQUESTS o|--o{ WORK_ENTRIES : "service_request_id"
+    DOCUMENTS o|--o{ WORK_ENTRIES : "document_id"
+    ASSETS ||--o{ WORK_ENTRIES : "asset_id"
+    USERS ||--o{ ASSET_INSPECTIONS : "created_by"
+    DOCUMENTS o|--o{ ASSET_INSPECTIONS : "document_id"
+    ASSETS ||--o{ ASSET_INSPECTIONS : "asset_id"
+    DOCUMENTS o|--o{ OI_PROPOSALS : "document_id"
+    USERS ||--o{ OI_PROPOSALS : "requester_id"
+    INFORMATION_OBJECTS o|--o{ OI_PROPOSALS : "created_oi_id"
+    USERS o|--o{ OI_PROPOSALS : "reviewed_by"
+    USERS o|--o{ PLANNED_ACTIVITIES : "completed_by"
+    DOCUMENTS o|--o{ PLANNED_ACTIVITIES : "evidence_document_id"
+    CONTROL_RULES o|--o{ PLANNED_ACTIVITIES : "rule_id"
+    ASSETS o|--o{ PLANNED_ACTIVITIES : "asset_id"
+    INFORMATION_OBJECTS ||--o{ PLANNED_ACTIVITIES : "oi_id"
+    USERS ||--o{ CONTROL_RULES : "created_by"
+    INFORMATION_OBJECTS o|--o{ CONTROL_RULES : "oi_id"
+    USERS ||--o{ OI_TRANSFER_APPROVALS : "actor_id"
+    USERS {
+        integer id PK
+        varchar_100 username UK
+        varchar_255 password_hash
+        varchar_20 role
+        varchar_180 display_name
+        boolean must_change_password
+        integer created_by "NULL"
+        boolean active
+        timestamptz created_at
+    }
+    LOGIN_SESSIONS {
+        integer id PK
+        integer user_id FK
+        varchar_64 token_hash UK
+        varchar_64 csrf_hash
+        timestamptz expires_at
+        timestamptz created_at
+    }
+    INFORMATION_OBJECTS {
+        integer id PK
+        varchar_80 code UK
+        varchar_250 name
+        varchar_250 classification
+        varchar_250 location
+        varchar_40 status
+        date attestation_issued_on "NULL"
+        date attestation_valid_until "NULL"
+        integer attestation_document_id "NULL"
+        text attestation_smb_path
+        integer attestation_notice_days
+        integer openproject_project_id "NULL"
+        text notes
+        timestamptz created_at
+        timestamptz updated_at
+    }
+    ASSETS {
+        integer id PK
+        varchar_80 code UK
+        integer oi_id FK "NULL"
+        varchar_150 serial_number
+        varchar_150 inventory_number
+        varchar_100 device_type
+        varchar_200 model
+        varchar_150 os_name
+        varchar_100 os_version
+        varchar_150 network_segment
+        varchar_60 ip_address
+        varchar_250 hostname
+        varchar_250 domain_name
+        varchar_36 seal_state
+        varchar_40 status
+        varchar_200 savz_name
+        varchar_120 savz_version
+        varchar_200 szi_nsd_name
+        varchar_120 szi_nsd_version
+        text notes
+        timestamptz created_at
+        timestamptz updated_at
+    }
+    ASSET_MNI {
+        integer id PK
+        integer asset_id FK
+        varchar_150 serial_number
+        varchar_150 accounting_number
+        varchar_60 media_type
+        timestamptz created_at
+    }
+    ASSET_ZMNI {
+        integer id PK
+        integer asset_id FK
+        varchar_150 serial_number
+        varchar_150 accounting_number
+        varchar_120 software_version
+        varchar_255 container_filename
+        date container_issued_on "NULL"
+        timestamptz created_at
+    }
+    ZMNI_CONTAINER_HISTORY {
+        integer id PK
+        integer zmni_id FK
+        varchar_255 container_filename
+        date container_issued_on "NULL"
+        integer recorded_by FK
+        timestamptz recorded_at
+    }
+    FIELD_DEFINITIONS {
+        integer id PK
+        varchar_20 entity_type
+        integer scope_entity_id "NULL"
+        varchar_150 name
+        varchar_20 field_type
+        json options
+        boolean required
+        boolean active
+    }
+    FIELD_VALUES {
+        integer id PK
+        varchar_20 entity_type
+        integer entity_id
+        integer field_id FK
+        json value "NULL"
+        text value_text
+        integer updated_by FK
+        timestamptz updated_at
+    }
+    DOCUMENTS {
+        integer id PK
+        varchar_250 title
+        varchar_255 original_filename
+        varchar_64 storage_key UK
+        varchar_120 content_type
+        varchar_64 sha256
+        integer size_bytes
+        integer supersedes_id FK "NULL"
+        integer created_by FK
+        timestamptz created_at
+    }
+    FIELD_ASSERTION_REVISIONS {
+        integer id PK
+        varchar_20 entity_type
+        integer entity_id
+        varchar_80 field_key
+        varchar_64 value_hash
+        integer changed_by FK
+        timestamptz created_at
+    }
+    FIELD_EVIDENCE {
+        integer id PK
+        varchar_20 entity_type
+        integer entity_id
+        varchar_80 field_key
+        varchar_64 value_hash
+        integer value_revision_id FK
+        integer document_id FK
+        varchar_20 kind
+        varchar_30 locator_type
+        varchar_150 locator_value
+        varchar_500 comment
+        integer created_by FK
+        timestamptz created_at
+    }
+    AUDIT_EVENTS {
+        integer id PK
+        integer actor_id FK
+        varchar_80 action
+        varchar_40 entity_type
+        integer entity_id
+        json details
+        varchar_36 request_id
+        varchar_60 source_ip
+        varchar_256 user_agent
+        timestamptz created_at
+    }
+    FIELD_VALUE_REVISIONS {
+        integer id PK
+        varchar_20 entity_type
+        integer entity_id
+        integer field_id FK
+        json value "NULL"
+        integer updated_by FK
+        timestamptz created_at
+    }
+    CONFIGURATION_BASELINES {
+        integer id PK
+        integer oi_id FK
+        varchar_80 version
+        varchar_20 status
+        json snapshot
+        varchar_64 snapshot_sha256
+        text notes
+        integer document_id FK "NULL"
+        integer created_by FK
+        timestamptz created_at
+        integer approved_by FK "NULL"
+        timestamptz approved_at "NULL"
+        text approval_note
+    }
+    CONFIGURATION_CHANGES {
+        integer id PK
+        integer oi_id FK
+        integer asset_id FK "NULL"
+        varchar_30 change_type
+        varchar_24 status
+        varchar_350 summary
+        text justification
+        integer document_id FK "NULL"
+        integer openproject_work_package_id "NULL"
+        integer created_by FK
+        timestamptz created_at
+        integer updated_by FK "NULL"
+        timestamptz updated_at
+        text resolution
+    }
+    ASSET_COMPONENTS {
+        integer id PK
+        integer asset_id FK
+        varchar_35 kind
+        varchar_150 manufacturer
+        varchar_200 model
+        varchar_150 serial_number
+        varchar_150 inventory_number
+        timestamptz installed_at
+        timestamptz removed_at "NULL"
+        text removal_reason
+        integer document_id FK "NULL"
+        integer created_by FK
+    }
+    SHARED_PERIPHERALS {
+        integer id PK
+        integer oi_id FK
+        varchar_35 kind
+        varchar_250 name
+        varchar_150 serial_number
+        varchar_60 ip_address
+        varchar_150 manufacturer
+        varchar_200 model
+        varchar_150 inventory_number
+        boolean media_present
+        varchar_100 media_kind
+        varchar_150 media_serial_number
+        varchar_150 media_inventory_number
+        integer created_by FK
+    }
+    ASSET_PERIPHERAL_ACCESS {
+        integer id PK
+        integer asset_id FK
+        integer peripheral_id FK
+        timestamptz allowed_at
+        timestamptz revoked_at "NULL"
+        text reason
+        varchar_32 connection_type
+        varchar_250 driver_name
+        varchar_120 driver_version
+        varchar_700 driver_smb_path
+        varchar_64 driver_sha256
+        integer driver_document_id "NULL"
+        integer created_by FK
+    }
+    ASSET_SECURITY_TOOLS {
+        integer id PK
+        integer asset_id FK
+        varchar_250 name
+        varchar_120 version
+        varchar_150 license_ref
+        varchar_10 expires_on
+        timestamptz installed_at
+        timestamptz removed_at "NULL"
+        text removal_reason
+        integer document_id FK "NULL"
+        integer created_by FK
+    }
+    SYSTEM_TYPES {
+        integer id PK
+        varchar_180 name UK
+        boolean active
+        timestamptz created_at
+    }
+    REGISTRY_REQUESTS {
+        integer id PK
+        varchar_150 segment
+        varchar_180 full_name
+        integer system_type_id FK "NULL"
+        varchar_60 ip_address
+        text scan_smb_path
+        integer asset_id FK "NULL"
+        integer created_by FK
+        timestamptz created_at
+    }
+    OI_REVIEWS {
+        integer id PK
+        integer oi_id FK
+        date reviewed_on
+        varchar_180 reviewer
+        text report_smb_path
+        text notes
+        integer created_by FK
+        timestamptz created_at
+    }
+    OI_REVIEW_FINDINGS {
+        integer id PK
+        integer review_id FK
+        varchar_20 category
+        text description
+        text corrective_action
+        boolean resolved
+        timestamptz resolved_at "NULL"
+        integer resolved_by FK "NULL"
+        integer created_by FK
+        timestamptz created_at
+    }
+    SERVICE_REQUESTS {
+        integer id PK
+        integer asset_id FK
+        varchar_180 reporter
+        timestamptz reported_at
+        varchar_350 subject
+        text fault_description
+        varchar_30 status
+        integer openproject_work_package_id "NULL"
+        integer document_id FK "NULL"
+        integer created_by FK
+        timestamptz created_at
+        timestamptz closed_at "NULL"
+    }
+    WORK_ENTRIES {
+        integer id PK
+        integer asset_id FK
+        integer service_request_id FK "NULL"
+        timestamptz performed_at
+        varchar_180 performer
+        varchar_40 work_type
+        text actions
+        text result
+        varchar_36 seal_state_after
+        text seal_note
+        integer document_page "NULL"
+        integer document_id FK "NULL"
+        integer created_by FK
+        timestamptz created_at
+    }
+    ASSET_INSPECTIONS {
+        integer id PK
+        integer asset_id FK
+        timestamptz inspected_at
+        varchar_180 inspector
+        varchar_180 subject_user
+        json checklist
+        json violation_categories
+        text finding_summary
+        text corrective_action
+        integer document_page "NULL"
+        varchar_30 status
+        integer document_id FK "NULL"
+        integer created_by FK
+        timestamptz created_at
+    }
+    OI_PROPOSALS {
+        integer id PK
+        integer requester_id FK
+        varchar_80 code
+        varchar_250 name
+        varchar_250 classification
+        varchar_250 location
+        text notes
+        integer document_id FK "NULL"
+        varchar_32 status
+        text review_note
+        integer reviewed_by FK "NULL"
+        timestamptz reviewed_at "NULL"
+        integer created_oi_id FK "NULL"
+        timestamptz created_at
+    }
+    PLANNED_ACTIVITIES {
+        integer id PK
+        varchar_200 event_key UK
+        varchar_35 event_type
+        integer oi_id FK
+        integer asset_id FK "NULL"
+        varchar_32 period_key
+        date deadline
+        varchar_350 subject
+        varchar_30 status
+        varchar_30 sync_status
+        integer openproject_project_id "NULL"
+        integer openproject_work_package_id "NULL"
+        varchar_500 sync_error
+        timestamptz last_sync_at "NULL"
+        timestamptz created_at
+        timestamptz updated_at
+        integer rule_id FK "NULL"
+        varchar_180 assignee
+        integer evidence_document_id FK "NULL"
+        text completion_note
+        integer completed_by FK "NULL"
+        timestamptz completed_at "NULL"
+        varchar_120 remote_status
+        timestamptz remote_checked_at "NULL"
+    }
+    CONTROL_RULES {
+        integer id PK
+        varchar_250 title
+        varchar_16 scope
+        integer oi_id FK "NULL"
+        date first_due
+        integer interval_months
+        varchar_180 assignee
+        boolean active
+        integer created_by FK
+        timestamptz created_at
+    }
+    OI_TRANSFER_APPROVALS {
+        varchar_36 id PK
+        integer actor_id FK
+        varchar_80 object_code
+        varchar_12 mode
+        varchar_64 archive_digest
+        varchar_64 baseline_digest
+        varchar_64 confirm_digest
+        timestamptz expires_at
+        timestamptz used_at "NULL"
+        timestamptz created_at
+    }

@@ -1,0 +1,18 @@
+# Test HTTPS overlay; use with: docker compose -p oi-registry-v06-test -f compose.yaml -f compose.https.yaml ...
+# Certificate directory MUST remain outside Git and contain server.crt/server.key.
+services:
+  oi-api:
+    environment:
+      OI_COOKIE_SECURE: "true"
+  oi-tls:
+    image: nginx:stable-alpine
+    restart: unless-stopped
+    depends_on:
+      oi-web:
+        condition: service_started
+    ports:
+      - "${OI_TLS_BIND:-127.0.0.1}:${OI_TLS_PORT:-18443}:443"
+    volumes:
+      - ./nginx.https.conf:/etc/nginx/conf.d/default.conf:ro
+      - ${OI_TLS_CERT_DIR:?Set OI_TLS_CERT_DIR outside the project}:/etc/oi-tls:ro
+    networks: [oi_internal]

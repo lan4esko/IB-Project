@@ -1,0 +1,82 @@
+erDiagram
+    SYSTEM_TYPES o|--o{ REGISTRY_REQUESTS : "system_type_id"
+    SERVICE_REQUESTS o|--o{ WORK_ENTRIES : "service_request_id"
+    REGISTRY_REQUESTS {
+        integer id PK
+        varchar_150 segment
+        varchar_180 full_name
+        integer system_type_id FK "NULL"
+        varchar_60 ip_address
+        text scan_smb_path
+        integer asset_id FK "NULL"
+        integer created_by FK
+        timestamptz created_at
+    }
+    SYSTEM_TYPES {
+        integer id PK
+        varchar_180 name UK
+        boolean active
+        timestamptz created_at
+    }
+    OI_PROPOSALS {
+        integer id PK
+        integer requester_id FK
+        varchar_80 code
+        varchar_250 name
+        varchar_250 classification
+        varchar_250 location
+        text notes
+        integer document_id FK "NULL"
+        varchar_32 status
+        text review_note
+        integer reviewed_by FK "NULL"
+        timestamptz reviewed_at "NULL"
+        integer created_oi_id FK "NULL"
+        timestamptz created_at
+    }
+    SERVICE_REQUESTS {
+        integer id PK
+        integer asset_id FK
+        varchar_180 reporter
+        timestamptz reported_at
+        varchar_350 subject
+        text fault_description
+        varchar_30 status
+        integer openproject_work_package_id "NULL"
+        integer document_id FK "NULL"
+        integer created_by FK
+        timestamptz created_at
+        timestamptz closed_at "NULL"
+    }
+    WORK_ENTRIES {
+        integer id PK
+        integer asset_id FK
+        integer service_request_id FK "NULL"
+        timestamptz performed_at
+        varchar_180 performer
+        varchar_40 work_type
+        text actions
+        text result
+        varchar_36 seal_state_after
+        text seal_note
+        integer document_page "NULL"
+        integer document_id FK "NULL"
+        integer created_by FK
+        timestamptz created_at
+    }
+    ASSET_INSPECTIONS {
+        integer id PK
+        integer asset_id FK
+        timestamptz inspected_at
+        varchar_180 inspector
+        varchar_180 subject_user
+        json checklist
+        json violation_categories
+        text finding_summary
+        text corrective_action
+        integer document_page "NULL"
+        varchar_30 status
+        integer document_id FK "NULL"
+        integer created_by FK
+        timestamptz created_at
+    }

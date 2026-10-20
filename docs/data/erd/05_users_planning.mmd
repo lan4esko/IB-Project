@@ -1,0 +1,88 @@
+erDiagram
+    USERS ||--o{ LOGIN_SESSIONS : "user_id"
+    USERS ||--o{ AUDIT_EVENTS : "actor_id"
+    USERS o|--o{ PLANNED_ACTIVITIES : "completed_by"
+    CONTROL_RULES o|--o{ PLANNED_ACTIVITIES : "rule_id"
+    USERS ||--o{ CONTROL_RULES : "created_by"
+    USERS ||--o{ OI_TRANSFER_APPROVALS : "actor_id"
+    PLANNED_ACTIVITIES {
+        integer id PK
+        varchar_200 event_key UK
+        varchar_35 event_type
+        integer oi_id FK
+        integer asset_id FK "NULL"
+        varchar_32 period_key
+        date deadline
+        varchar_350 subject
+        varchar_30 status
+        varchar_30 sync_status
+        integer openproject_project_id "NULL"
+        integer openproject_work_package_id "NULL"
+        varchar_500 sync_error
+        timestamptz last_sync_at "NULL"
+        timestamptz created_at
+        timestamptz updated_at
+        integer rule_id FK "NULL"
+        varchar_180 assignee
+        integer evidence_document_id FK "NULL"
+        text completion_note
+        integer completed_by FK "NULL"
+        timestamptz completed_at "NULL"
+        varchar_120 remote_status
+        timestamptz remote_checked_at "NULL"
+    }
+    CONTROL_RULES {
+        integer id PK
+        varchar_250 title
+        varchar_16 scope
+        integer oi_id FK "NULL"
+        date first_due
+        integer interval_months
+        varchar_180 assignee
+        boolean active
+        integer created_by FK
+        timestamptz created_at
+    }
+    OI_TRANSFER_APPROVALS {
+        varchar_36 id PK
+        integer actor_id FK
+        varchar_80 object_code
+        varchar_12 mode
+        varchar_64 archive_digest
+        varchar_64 baseline_digest
+        varchar_64 confirm_digest
+        timestamptz expires_at
+        timestamptz used_at "NULL"
+        timestamptz created_at
+    }
+    AUDIT_EVENTS {
+        integer id PK
+        integer actor_id FK
+        varchar_80 action
+        varchar_40 entity_type
+        integer entity_id
+        json details
+        varchar_36 request_id
+        varchar_60 source_ip
+        varchar_256 user_agent
+        timestamptz created_at
+    }
+    USERS {
+        integer id PK
+        varchar_100 username UK
+        varchar_255 password_hash
+        varchar_20 role
+        varchar_180 display_name
+        boolean must_change_password
+        integer created_by "NULL"
+        boolean active
+        timestamptz created_at
+    }
+    LOGIN_SESSIONS {
+        integer id PK
+        integer user_id FK
+        varchar_64 token_hash UK
+        varchar_64 csrf_hash
+        timestamptz expires_at
+        timestamptz created_at
+    }

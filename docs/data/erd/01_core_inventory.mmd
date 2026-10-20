@@ -1,0 +1,135 @@
+erDiagram
+    INFORMATION_OBJECTS o|--o{ ASSETS : "oi_id"
+    ASSETS ||--o{ ASSET_MNI : "asset_id"
+    ASSETS ||--o{ ASSET_ZMNI : "asset_id"
+    ASSET_ZMNI ||--o{ ZMNI_CONTAINER_HISTORY : "zmni_id"
+    ASSETS ||--o{ ASSET_COMPONENTS : "asset_id"
+    INFORMATION_OBJECTS ||--o{ SHARED_PERIPHERALS : "oi_id"
+    ASSETS ||--o{ ASSET_PERIPHERAL_ACCESS : "asset_id"
+    SHARED_PERIPHERALS ||--o{ ASSET_PERIPHERAL_ACCESS : "peripheral_id"
+    ASSETS ||--o{ ASSET_SECURITY_TOOLS : "asset_id"
+    INFORMATION_OBJECTS {
+        integer id PK
+        varchar_80 code UK
+        varchar_250 name
+        varchar_250 classification
+        varchar_250 location
+        varchar_40 status
+        date attestation_issued_on "NULL"
+        date attestation_valid_until "NULL"
+        integer attestation_document_id "NULL"
+        text attestation_smb_path
+        integer attestation_notice_days
+        integer openproject_project_id "NULL"
+        text notes
+        timestamptz created_at
+        timestamptz updated_at
+    }
+    ASSETS {
+        integer id PK
+        varchar_80 code UK
+        integer oi_id FK "NULL"
+        varchar_150 serial_number
+        varchar_150 inventory_number
+        varchar_100 device_type
+        varchar_200 model
+        varchar_150 os_name
+        varchar_100 os_version
+        varchar_150 network_segment
+        varchar_60 ip_address
+        varchar_250 hostname
+        varchar_250 domain_name
+        varchar_36 seal_state
+        varchar_40 status
+        varchar_200 savz_name
+        varchar_120 savz_version
+        varchar_200 szi_nsd_name
+        varchar_120 szi_nsd_version
+        text notes
+        timestamptz created_at
+        timestamptz updated_at
+    }
+    ASSET_MNI {
+        integer id PK
+        integer asset_id FK
+        varchar_150 serial_number
+        varchar_150 accounting_number
+        varchar_60 media_type
+        timestamptz created_at
+    }
+    ASSET_ZMNI {
+        integer id PK
+        integer asset_id FK
+        varchar_150 serial_number
+        varchar_150 accounting_number
+        varchar_120 software_version
+        varchar_255 container_filename
+        date container_issued_on "NULL"
+        timestamptz created_at
+    }
+    ZMNI_CONTAINER_HISTORY {
+        integer id PK
+        integer zmni_id FK
+        varchar_255 container_filename
+        date container_issued_on "NULL"
+        integer recorded_by FK
+        timestamptz recorded_at
+    }
+    ASSET_COMPONENTS {
+        integer id PK
+        integer asset_id FK
+        varchar_35 kind
+        varchar_150 manufacturer
+        varchar_200 model
+        varchar_150 serial_number
+        varchar_150 inventory_number
+        timestamptz installed_at
+        timestamptz removed_at "NULL"
+        text removal_reason
+        integer document_id FK "NULL"
+        integer created_by FK
+    }
+    ASSET_SECURITY_TOOLS {
+        integer id PK
+        integer asset_id FK
+        varchar_250 name
+        varchar_120 version
+        varchar_150 license_ref
+        varchar_10 expires_on
+        timestamptz installed_at
+        timestamptz removed_at "NULL"
+        text removal_reason
+        integer document_id FK "NULL"
+        integer created_by FK
+    }
+    SHARED_PERIPHERALS {
+        integer id PK
+        integer oi_id FK
+        varchar_35 kind
+        varchar_250 name
+        varchar_150 serial_number
+        varchar_60 ip_address
+        varchar_150 manufacturer
+        varchar_200 model
+        varchar_150 inventory_number
+        boolean media_present
+        varchar_100 media_kind
+        varchar_150 media_serial_number
+        varchar_150 media_inventory_number
+        integer created_by FK
+    }
+    ASSET_PERIPHERAL_ACCESS {
+        integer id PK
+        integer asset_id FK
+        integer peripheral_id FK
+        timestamptz allowed_at
+        timestamptz revoked_at "NULL"
+        text reason
+        varchar_32 connection_type
+        varchar_250 driver_name
+        varchar_120 driver_version
+        varchar_700 driver_smb_path
+        varchar_64 driver_sha256
+        integer driver_document_id "NULL"
+        integer created_by FK
+    }

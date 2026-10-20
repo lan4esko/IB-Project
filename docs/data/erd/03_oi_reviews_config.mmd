@@ -1,0 +1,55 @@
+erDiagram
+    OI_REVIEWS ||--o{ OI_REVIEW_FINDINGS : "review_id"
+    OI_REVIEWS {
+        integer id PK
+        integer oi_id FK
+        date reviewed_on
+        varchar_180 reviewer
+        text report_smb_path
+        text notes
+        integer created_by FK
+        timestamptz created_at
+    }
+    OI_REVIEW_FINDINGS {
+        integer id PK
+        integer review_id FK
+        varchar_20 category
+        text description
+        text corrective_action
+        boolean resolved
+        timestamptz resolved_at "NULL"
+        integer resolved_by FK "NULL"
+        integer created_by FK
+        timestamptz created_at
+    }
+    CONFIGURATION_BASELINES {
+        integer id PK
+        integer oi_id FK
+        varchar_80 version
+        varchar_20 status
+        json snapshot
+        varchar_64 snapshot_sha256
+        text notes
+        integer document_id FK "NULL"
+        integer created_by FK
+        timestamptz created_at
+        integer approved_by FK "NULL"
+        timestamptz approved_at "NULL"
+        text approval_note
+    }
+    CONFIGURATION_CHANGES {
+        integer id PK
+        integer oi_id FK
+        integer asset_id FK "NULL"
+        varchar_30 change_type
+        varchar_24 status
+        varchar_350 summary
+        text justification
+        integer document_id FK "NULL"
+        integer openproject_work_package_id "NULL"
+        integer created_by FK
+        timestamptz created_at
+        integer updated_by FK "NULL"
+        timestamptz updated_at
+        text resolution
+    }
